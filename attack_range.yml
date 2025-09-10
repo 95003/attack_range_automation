@@ -202,21 +202,11 @@
         executable: pip3
       become: yes
 
-    # Deploy attack_range configuration
-    - name: Copy attack_range config
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/attack_range.conf"
-        dest: /home/ubuntu/attack_range/attack_range.conf
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
-      become_user: ubuntu
-
     # Build attack_range with provided config
     - name: Build attack_range
       ansible.builtin.shell: |
         cd /home/ubuntu/attack_range
-        python3 attack_range.py build -c attack_range.conf
+        python3 attack_range.py build -c attack_range.conf.template
       args:
         executable: /bin/bash
       become_user: ubuntu
