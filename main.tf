@@ -1,5 +1,27 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
+  }
+}
+
 provider "aws" {
-  region = "ap-southeast-2" # change if needed
+  region = "ap-southeast-2"
+}
+
+# --- Random ID to avoid SG name conflicts ---
+resource "random_id" "suffix" {
+  byte_length = 4
 }
 
 # --- Get Latest Ubuntu 22.04 AMI ---
@@ -36,7 +58,7 @@ resource "aws_instance" "attack_range" {
 
 # --- Security Group ---
 resource "aws_security_group" "attack_range_sg" {
-  name        = "attack-range-sg"
+  name        = "attack-range-sg-${random_id.suffix.hex}"
   description = "Security group for attack-range-server"
 
   # SSH

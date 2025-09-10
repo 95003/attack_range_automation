@@ -2,14 +2,25 @@
 - name: Setup Splunk Attack Range
   hosts: attack_range
   become: yes
+  vars:
+    terraform_version: "1.9.8"
+    terraform_zip: "/home/ubuntu/terraform.zip"
+    awscli_zip: "/home/ubuntu/awscliv2.zip"
 
   pre_tasks:
     - name: Ensure SSH key permissions are correct
       ansible.builtin.file:
-        path: "/mnt/c/Users/Dhaarun M V/OneDrive/Documents/Downloads/Attack_range.pem"
-        mode: '0600'
+        path: "{{ playbook_dir }}/keys/Admin123.pem"
+        mode: '0400'
       delegate_to: localhost
       run_once: true
+
+    - name: Wait for SSH to become available
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: Test SSH connectivity
+      ansible.builtin.ping:
 
   tasks:
     - name: Update system packages
@@ -25,52 +36,187 @@
           - unzip
           - python3-pip
           - curl
+          - zip
         state: present
 
-    - name: Install Terraform
-      ansible.builtin.shell: |
-        curl -s https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip -o terraform.zip
-        unzip -o terraform.zip
-        sudo mv terraform /usr/local/bin/
-      args:
-        chdir: /home/ubuntu
+    # Install build dependencies for Python packages
+    - name: Install build dependencies for Python packages
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - libffi-dev
+          - python3-dev
+          - python3-setuptools
+          - python3-wheel
+        state: present
+        update_cache: yes
+
+    # Upgrade pip, setuptools, wheel
+    - name: Upgrade pip, setuptools, and wheel
+      ansible.builtin.pip:
+        name:
+          - pip
+          - setuptools
+          - wheel
+        state: latest
+        executable: pip3
+
+    # Terraform Installation
+    - name: Download Terraform
+      ansible.builtin.get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
+        dest: "{{ terraform_zip }}"
+        mode: '0644'
+      become_user: ubuntu
+
+    - name: Unzip Terraform
+      ansible.builtin.unarchive:
+        src: "{{ terraform_zip }}"
+        dest: "/home/ubuntu/"
+        remote_src: yes
+        mode: '0755'
+      become_user: ubuntu
+
+    - name: Move Terraform binary to /usr/local/bin
+      ansible.builtin.command:
+        cmd: mv /home/ubuntu/terraform /usr/local/bin/terraform
         creates: /usr/local/bin/terraform
 
+    # Attack Range repo (cloned directly into /attack_range)
     - name: Clone attack range repo
       ansible.builtin.git:
         repo: https://github.com/splunk/attack_range.git
         dest: /home/ubuntu/attack_range
         version: master
+        force: yes
+      become_user: ubuntu
+
+    # AWS CLI Installation
+    - name: Download AWS CLI v2
+      ansible.builtin.get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: "{{ awscli_zip }}"
+        mode: '0644'
+      become_user: ubuntu
+
+    - name: Ensure unzip directory exists
+      ansible.builtin.file:
+        path: /home/ubuntu/aws
+        state: directory
+        mode: '0755'
+      become_user: ubuntu
+
+    # Remove old AWS CLI folder if exists
+    - name: Remove old AWS CLI directory
+      ansible.builtin.file:
+        path: /home/ubuntu/aws
+        state: absent
+      become: yes
+
+    - name: Unzip AWS CLI
+      ansible.builtin.unarchive:
+        src: "{{ awscli_zip }}"
+        dest: /home/ubuntu/
+        remote_src: yes
+        extra_opts: [ "-o" ]
+      become_user: ubuntu
 
     - name: Install AWS CLI
-      ansible.builtin.shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -o awscliv2.zip
-        sudo ./aws/install --update
-      args:
+      ansible.builtin.command:
+        cmd: ./aws/install --update
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
+      become: yes
 
+    # AWS CLI Configuration
+    - name: Ask for AWS Access Key ID
+      ansible.builtin.pause:
+        prompt: "Enter your AWS Access Key ID"
+      register: aws_access_key
+
+    - name: Ask for AWS Secret Access Key
+      ansible.builtin.pause:
+        prompt: "Enter your AWS Secret Access Key"
+        echo: no
+      register: aws_secret_key
+
+    - name: Ask for AWS Region
+      ansible.builtin.pause:
+        prompt: "Enter your default AWS region (e.g., us-east-1)"
+      register: aws_region
+
+    - name: Configure AWS CLI
+      ansible.builtin.shell: |
+        aws configure set aws_access_key_id "{{ aws_access_key.user_input }}"
+        aws configure set aws_secret_access_key "{{ aws_secret_key.user_input }}"
+        aws configure set default.region "{{ aws_region.user_input }}"
+      args:
+        executable: /bin/bash
+
+    # Poetry Installation
     - name: Install Poetry
       ansible.builtin.shell: |
-        curl -sSL https://install.python-poetry.org/ | python3 -
-        echo 'export PATH="/home/ubuntu/.local/bin:$PATH"' >> /home/ubuntu/.bashrc
+        curl -sSL https://install.python-poetry.org | python3 -
       args:
         executable: /bin/bash
         creates: /home/ubuntu/.local/bin/poetry
+      become_user: ubuntu
 
-    - name: Install Poetry plugin and dependencies
+    - name: Add Poetry to PATH
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'export PATH="/home/ubuntu/.local/bin:$PATH"'
+        create: yes
+      become_user: ubuntu
+
+    - name: Install Poetry plugin
       ansible.builtin.shell: |
+        export PATH="/home/ubuntu/.local/bin:$PATH"
         /home/ubuntu/.local/bin/poetry self add poetry-plugin-shell
-        cd /home/ubuntu/attack_range && /home/ubuntu/.local/bin/poetry install
       args:
         executable: /bin/bash
+      become_user: ubuntu
 
-    - name: Run attack_range configure (manual step)
+    # Dependencies
+    - name: Install modern cffi
+      ansible.builtin.pip:
+        name: cffi==1.15.1
+        executable: pip3
+
+    - name: Patch cffi version in requirements.txt
+      ansible.builtin.replace:
+        path: /home/ubuntu/attack_range/requirements.txt
+        regexp: 'cffi==1.13.2'
+        replace: 'cffi==1.15.1'
+      become_user: ubuntu # <-- add this
+
+    - name: Install Python dependencies for attack_range
+      ansible.builtin.pip:
+        requirements: /home/ubuntu/attack_range/requirements.txt
+        executable: pip3
+
+    # Upgrade tabulate for Python 3.10 compatibility
+    - name: Upgrade tabulate to be compatible with Python 3.10
+      ansible.builtin.pip:
+        name: tabulate>=0.8.10
+        executable: pip3
+      become: yes
+
+    # Deploy attack_range configuration
+    - name: Copy attack_range config
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/attack_range.conf"
+        dest: /home/ubuntu/attack_range/attack_range.conf
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      become_user: ubuntu
+
+    # Build attack_range with provided config
+    - name: Build attack_range
       ansible.builtin.shell: |
         cd /home/ubuntu/attack_range
-        /home/ubuntu/.local/bin/poetry run python attack_range.py configure
+        python3 attack_range.py build -c attack_range.conf
       args:
         executable: /bin/bash
-      async: 0
-      poll: 0   # run interactively; requires user input
+      become_user: ubuntu
