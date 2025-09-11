@@ -196,6 +196,9 @@
 - hosts: all
   gather_facts: false
   vars_prompt:
+    - name: attack_range_name
+      prompt: "Enter a name for your attack range"
+      private: no
     - name: attack_range_provider
       prompt: "Enter the provider (aws/azure/local)"
       private: no
