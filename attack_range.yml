@@ -77,7 +77,8 @@
         src: "{{ terraform_zip }}"
         dest: "/usr/local/bin/"
         remote_src: yes
-        mode: '0755'
+      args:
+        creates: "/usr/local/bin/terraform"
 
     # -----------------------------
     # Clone Attack Range Repo
@@ -188,6 +189,10 @@
         force: no   # don’t overwrite if it already exists
       become_user: ubuntu
 
+
+# ============================================
+# Second Play – Configure Attack Range
+# ============================================
 - hosts: all
   gather_facts: false
   vars_prompt:
@@ -220,63 +225,14 @@
       private: no
 
   tasks:
-    - name: Set provider
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^provider'
-        line: "provider = {{ attack_range_provider }}"
+    - name: Generate attack_range.conf from template
+      template:
+        src: attack_range.yml.j2
+        dest: /home/ubuntu/attack_range/attack_range.conf
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
 
-    - name: Set region
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^region'
-        line: "region = {{ attack_range_region }}"
-
-    - name: Set password
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^attack_range_password'
-        line: "attack_range_password = {{ attack_range_password }}"
-
-    - name: Set OS
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^os'
-        line: "os = {{ attack_range_os }}"
-
-    - name: Set instance type
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^instance_type'
-        line: "instance_type = {{ attack_range_instance_type }}"
-
-    - name: Enable Splunk
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^splunk'
-        line: "splunk = {{ attack_range_splunk }}"
-
-    - name: Enable Snort
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^snort'
-        line: "snort = {{ attack_range_snort }}"
-
-    - name: Enable Zeek
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^zeek'
-        line: "zeek = {{ attack_range_zeek }}"
-
-    - name: Enable Nginx
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^nginx'
-        line: "nginx = {{ attack_range_nginx }}"
-
-    # -----------------------------
-    # Build Attack Range
-    # -----------------------------
     - name: Build attack_range
       ansible.builtin.shell: |
         cd /home/ubuntu/attack_range
