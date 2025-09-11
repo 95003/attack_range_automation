@@ -262,6 +262,40 @@
         regexp: '^nginx'
         line: "nginx = {{ attack_range_nginx }}"
 
+    - name: Create attack_range.conf directly
+      copy:
+        dest: /home/ubuntu/attack_range/attack_range.conf
+        content: |
+          [global]
+          log_path = attack_range.log
+          log_level = INFO
+          attack_range_password = {{ attack_range_password }}
+          cloud_provider = aws
+
+          [aws]
+          instance_type_ec2 = {{ attack_range_instance_type | default("t2.medium") }}
+          region = {{ attack_range_region | default("ap-southeast-2") }}
+
+          [range_settings]
+          key_name = {{ attack_range_key_name | default("attack-range-key-pair") }}
+          ip_whitelist = 0.0.0.0/0
+          private_key_path = {{ attack_range_private_key | default("/home/ubuntu/.ssh/Admin123.pem") }}
+
+          [environment]
+          windows_domain_controller = 1
+          windows_server = 0
+          windows_client = 0
+          kali_machine = 0
+          zeek_sensor = 0
+          phantom_server = 0
+
+          [splunk_settings]
+          splunk_url = https://download.splunk.com/products/splunk/releases/8.0.5/linux/splunk-8.0.5-a1a6394cc5ae-Linux-x86_64.tgz
+          splunk_binary = splunk-8.0.5-a1a6394cc5ae-Linux-x86_64.tgz
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
     - name: Build attack_range
       ansible.builtin.shell: |
         cd /home/ubuntu/attack_range
