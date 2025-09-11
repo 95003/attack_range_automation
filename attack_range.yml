@@ -24,9 +24,6 @@
       ansible.builtin.ping:
 
   tasks:
-    # -----------------------------
-    # System Preparation
-    # -----------------------------
     - name: Update system packages
       ansible.builtin.apt:
         update_cache: yes
@@ -63,9 +60,6 @@
         state: latest
         executable: pip3
 
-    # -----------------------------
-    # Terraform Installation
-    # -----------------------------
     - name: Download Terraform
       ansible.builtin.get_url:
         url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
@@ -80,9 +74,6 @@
       args:
         creates: "/usr/local/bin/terraform"
 
-    # -----------------------------
-    # Clone Attack Range Repo
-    # -----------------------------
     - name: Clone attack range repo
       ansible.builtin.git:
         repo: https://github.com/splunk/attack_range.git
@@ -91,9 +82,6 @@
         force: yes
       become_user: ubuntu
 
-    # -----------------------------
-    # AWS CLI Installation
-    # -----------------------------
     - name: Download AWS CLI v2
       ansible.builtin.get_url:
         url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
@@ -112,9 +100,6 @@
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
 
-    # -----------------------------
-    # AWS CLI Configuration
-    # -----------------------------
     - name: Ask for AWS Access Key ID
       ansible.builtin.pause:
         prompt: "Enter your AWS Access Key ID"
@@ -139,9 +124,6 @@
       args:
         executable: /bin/bash
 
-    # -----------------------------
-    # Poetry & Python Dependencies
-    # -----------------------------
     - name: Install Poetry
       ansible.builtin.shell: |
         curl -sSL https://install.python-poetry.org | python3 -
@@ -181,24 +163,21 @@
         name: "tabulate>=0.8.10"
         executable: pip3
 
-    - name: Copy default attack_range.conf from template if not present
+    - name: Copy default attack_range.conf if not present
       ansible.builtin.copy:
         src: /home/ubuntu/attack_range/attack_range.conf.template
         dest: /home/ubuntu/attack_range/attack_range.conf
         remote_src: yes
-        force: no   # don’t overwrite if it already exists
+        force: no
       become_user: ubuntu
 
 
-# ============================================
-# Second Play – Configure Attack Range
-# ============================================
+# ==============================
+# Second play: Configure Attack Range
+# ==============================
 - hosts: all
   gather_facts: false
   vars_prompt:
-    - name: attack_range_name
-      prompt: "Enter a name for your attack range"
-      private: no
     - name: attack_range_provider
       prompt: "Enter the provider (aws/azure/local)"
       private: no
@@ -211,6 +190,7 @@
     - name: attack_range_os
       prompt: "Choose OS (windows/linux)"
       private: no
+      default: "linux"
     - name: attack_range_instance_type
       prompt: "Enter instance type (e.g., t2.medium)"
       private: no
@@ -228,13 +208,59 @@
       private: no
 
   tasks:
-    - name: Generate attack_range.conf from template
-      template:
-        src: attack_range.yml.j2
-        dest: /home/ubuntu/attack_range/attack_range.conf
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
+    - name: Set provider
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^provider'
+        line: "provider = {{ attack_range_provider }}"
+
+    - name: Set region
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^region'
+        line: "region = {{ attack_range_region }}"
+
+    - name: Set password
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^attack_range_password'
+        line: "attack_range_password = {{ attack_range_password }}"
+
+    - name: Set OS
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^os'
+        line: "os = {{ attack_range_os }}"
+
+    - name: Set instance type
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^instance_type'
+        line: "instance_type = {{ attack_range_instance_type }}"
+
+    - name: Enable Splunk
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^splunk'
+        line: "splunk = {{ attack_range_splunk }}"
+
+    - name: Enable Snort
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^snort'
+        line: "snort = {{ attack_range_snort }}"
+
+    - name: Enable Zeek
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^zeek'
+        line: "zeek = {{ attack_range_zeek }}"
+
+    - name: Enable Nginx
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^nginx'
+        line: "nginx = {{ attack_range_nginx }}"
 
     - name: Build attack_range
       ansible.builtin.shell: |
