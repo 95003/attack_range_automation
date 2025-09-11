@@ -206,7 +206,7 @@
     - name: Build attack_range
       ansible.builtin.shell: |
         cd /home/ubuntu/attack_range
-        python3 attack_range.py build --config attack_range.conf
+        python3 attack_range.py build 
       args:
         executable: /bin/bash
       become_user: ubuntu
