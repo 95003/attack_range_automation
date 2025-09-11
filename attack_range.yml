@@ -191,30 +191,35 @@
 - hosts: all
   gather_facts: false
   vars_prompt:
-    - name: attack_range_password
-      prompt: "Enter the attack_range password"
-      private: yes   # hides input like a password
     - name: attack_range_provider
       prompt: "Enter the provider (aws/azure/local)"
       private: no
     - name: attack_range_region
       prompt: "Enter the region (e.g., ap-southeast-2)"
       private: no
+    - name: attack_range_password
+      prompt: "Enter the attack_range password"
+      private: yes
+    - name: attack_range_os
+      prompt: "Choose OS (windows/linux)"
+      private: no
+    - name: attack_range_instance_type
+      prompt: "Enter instance type (e.g., t2.medium)"
+      private: no
+    - name: attack_range_splunk
+      prompt: "Install Splunk? (true/false)"
+      private: no
+    - name: attack_range_snort
+      prompt: "Enable Snort? (true/false)"
+      private: no
+    - name: attack_range_zeek
+      prompt: "Enable Zeek? (true/false)"
+      private: no
+    - name: attack_range_nginx
+      prompt: "Enable Nginx? (true/false)"
+      private: no
 
   tasks:
-    - name: Ensure attack_range.conf exists
-      copy:
-        src: /home/ubuntu/attack_range/attack_range.conf.template
-        dest: /home/ubuntu/attack_range/attack_range.conf
-        remote_src: yes
-        force: no
-
-    - name: Set attack_range_password
-      lineinfile:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        regexp: '^attack_range_password'
-        line: "attack_range_password = {{ attack_range_password }}"
-
     - name: Set provider
       lineinfile:
         path: /home/ubuntu/attack_range/attack_range.conf
@@ -227,10 +232,47 @@
         regexp: '^region'
         line: "region = {{ attack_range_region }}"
 
-    - name: Build attack_range
-      shell: |
-        cd /home/ubuntu/attack_range
-        python3 attack_range.py build
+    - name: Set password
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^attack_range_password'
+        line: "attack_range_password = {{ attack_range_password }}"
+
+    - name: Set OS
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^os'
+        line: "os = {{ attack_range_os }}"
+
+    - name: Set instance type
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^instance_type'
+        line: "instance_type = {{ attack_range_instance_type }}"
+
+    - name: Enable Splunk
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^splunk'
+        line: "splunk = {{ attack_range_splunk }}"
+
+    - name: Enable Snort
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^snort'
+        line: "snort = {{ attack_range_snort }}"
+
+    - name: Enable Zeek
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^zeek'
+        line: "zeek = {{ attack_range_zeek }}"
+
+    - name: Enable Nginx
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^nginx'
+        line: "nginx = {{ attack_range_nginx }}"
 
     # -----------------------------
     # Build Attack Range
