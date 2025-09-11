@@ -303,4 +303,5 @@
       command: python3 attack_range.py build -c attack_range.conf
       args:
         chdir: /home/ubuntu/attack_range
+      become_user: ubuntu
 
