@@ -180,6 +180,14 @@
         name: "tabulate>=0.8.10"
         executable: pip3
 
+    - name: Copy default attack_range.conf from template if not present
+      ansible.builtin.copy:
+        src: /home/ubuntu/attack_range/attack_range.conf.template
+        dest: /home/ubuntu/attack_range/attack_range.conf
+        remote_src: yes
+        force: no   # don’t overwrite if it already exists
+      become_user: ubuntu
+
     # -----------------------------
     # Build Attack Range
     # -----------------------------
