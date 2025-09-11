@@ -280,6 +280,8 @@
           key_name = {{ attack_range_key_name | default("attack-range-key-pair") }}
           ip_whitelist = 0.0.0.0/0
           private_key_path = {{ attack_range_private_key | default("/home/ubuntu/.ssh/Admin123.pem") }}
+          region = {{ attack_range_region | default("ap-southeast-2") }}
+          range_name = {{ attack_range_name | default("default") }}
 
           [environment]
           windows_domain_controller = 1
@@ -295,6 +297,7 @@
         owner: ubuntu
         group: ubuntu
         mode: '0644'
+
 
     - name: Build attack_range
       ansible.builtin.shell: |
