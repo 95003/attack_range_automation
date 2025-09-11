@@ -1,0 +1,23 @@
+# terraform.tfvars.example
+
+# AWS Configuration
+key_name        = "YourKeyName"
+volume_size     = 50
+aws_region      = "ap-southeast-2"
+aws_access_key  = "YOUR_AWS_ACCESS_KEY"
+aws_secret_key  = "YOUR_AWS_SECRET_KEY"
+
+# Attack Range Configuration
+attack_range_provider       = "aws"
+attack_range_region         = "ap-southeast-2"
+attack_range_password       = "YOUR_ATTACK_RANGE_PASSWORD"
+attack_range_os             = "linux"
+attack_range_instance_type  = "t2.medium"
+attack_range_splunk         = true
+attack_range_snort          = false
+attack_range_zeek           = false
+attack_range_nginx          = false
+
+attack_range_key_name       = "attack-range-key-pair"
+attack_range_private_key    = "/home/ubuntu/.ssh/Admin123.pem"
+attack_range_name           = "default"

@@ -1,0 +1,4 @@
+# Ignore sensitive files
+terraform.tfvars
+keys/
+inventory.ini
