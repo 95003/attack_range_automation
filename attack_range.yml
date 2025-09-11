@@ -188,6 +188,50 @@
         force: no   # don’t overwrite if it already exists
       become_user: ubuntu
 
+- hosts: all
+  gather_facts: false
+  vars_prompt:
+    - name: attack_range_password
+      prompt: "Enter the attack_range password"
+      private: yes   # hides input like a password
+    - name: attack_range_provider
+      prompt: "Enter the provider (aws/azure/local)"
+      private: no
+    - name: attack_range_region
+      prompt: "Enter the region (e.g., ap-southeast-2)"
+      private: no
+
+  tasks:
+    - name: Ensure attack_range.conf exists
+      copy:
+        src: /home/ubuntu/attack_range/attack_range.conf.template
+        dest: /home/ubuntu/attack_range/attack_range.conf
+        remote_src: yes
+        force: no
+
+    - name: Set attack_range_password
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^attack_range_password'
+        line: "attack_range_password = {{ attack_range_password }}"
+
+    - name: Set provider
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^provider'
+        line: "provider = {{ attack_range_provider }}"
+
+    - name: Set region
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^region'
+        line: "region = {{ attack_range_region }}"
+
+    - name: Build attack_range
+      shell: |
+        cd /home/ubuntu/attack_range
+        python3 attack_range.py build
+
     # -----------------------------
     # Build Attack Range
     # -----------------------------
