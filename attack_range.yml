@@ -8,26 +8,8 @@
     awscli_zip: "/home/ubuntu/awscliv2.zip"
     poetry_bin: "/home/ubuntu/.local/bin/poetry"
 
-    # Attack range inputs: read from env first, then allow override via extra-vars
-    attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default(attack_range_provider_default | default('aws')) }}"
-    attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default(attack_range_region_default | default('ap-southeast-2')) }}"
-    attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default(attack_range_password_default | default('changeme')) }}"
-    attack_range_os: "{{ lookup('env','ATTACK_RANGE_OS') | default(attack_range_os_default | default('linux')) }}"
-    attack_range_instance_type: "{{ lookup('env','ATTACK_RANGE_INSTANCE_TYPE') | default(attack_range_instance_type_default | default('t2.medium')) }}"
-
-    # Feature flags using yes/no (strings). Use env vars like ATTACK_RANGE_SPLUNK=yes
-    attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default(attack_range_splunk_default | default('yes')) }}"
-    attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default(attack_range_snort_default  | default('no'))  }}"
-    attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default(attack_range_zeek_default   | default('no'))  }}"
-    attack_range_nginx:  "{{ lookup('env','ATTACK_RANGE_NGINX')  | default(attack_range_nginx_default  | default('no'))  }}"
-
-    # Other range settings
-    attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default(attack_range_key_name_default | default('attack-range-key-pair')) }}"
-    attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default(attack_range_private_key_default | default('/home/ubuntu/.ssh/Admin123.pem')) }}"
-    attack_range_name: "{{ lookup('env','ATTACK_RANGE_NAME') | default(attack_range_name_default | default('default')) }}"
-
   pre_tasks:
-    - name: Ensure SSH key permissions are correct on controller (if provided in repo)
+    - name: Ensure SSH key permissions are correct
       ansible.builtin.file:
         path: "{{ playbook_dir }}/keys/Admin123.pem"
         mode: '0400'
@@ -36,7 +18,7 @@
 
     - name: Wait for SSH to become available
       ansible.builtin.wait_for_connection:
-        timeout: 300
+        timeout: 180
 
     - name: Test SSH connectivity
       ansible.builtin.ping:
@@ -69,15 +51,7 @@
         state: present
         update_cache: yes
 
-    - name: Ensure setuptools pinned to <81 to avoid pkg_resources deprecation warning
-      ansible.builtin.pip:
-        name:
-          - "setuptools<81"
-          - pip
-          - wheel
-        executable: pip3
-
-    - name: Upgrade pip, setuptools, and wheel (extra safety)
+    - name: Upgrade pip, setuptools, and wheel
       ansible.builtin.pip:
         name:
           - pip
@@ -126,6 +100,30 @@
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
 
+    - name: Ask for AWS Access Key ID
+      ansible.builtin.pause:
+        prompt: "Enter your AWS Access Key ID"
+      register: aws_access_key
+
+    - name: Ask for AWS Secret Access Key
+      ansible.builtin.pause:
+        prompt: "Enter your AWS Secret Access Key"
+        echo: no
+      register: aws_secret_key
+
+    - name: Ask for AWS Region
+      ansible.builtin.pause:
+        prompt: "Enter your default AWS region (e.g., us-east-1)"
+      register: aws_region
+
+    - name: Configure AWS CLI
+      ansible.builtin.shell: |
+        aws configure set aws_access_key_id "{{ aws_access_key.user_input }}"
+        aws configure set aws_secret_access_key "{{ aws_secret_key.user_input }}"
+        aws configure set default.region "{{ aws_region.user_input }}"
+      args:
+        executable: /bin/bash
+
     - name: Install Poetry
       ansible.builtin.shell: |
         curl -sSL https://install.python-poetry.org | python3 -
@@ -134,117 +132,140 @@
         creates: "{{ poetry_bin }}"
       become_user: ubuntu
 
-    - name: Add Poetry to PATH for ubuntu user
+    - name: Add Poetry to PATH
       ansible.builtin.lineinfile:
         path: /home/ubuntu/.bashrc
         line: 'export PATH="/home/ubuntu/.local/bin:$PATH"'
         create: yes
       become_user: ubuntu
 
-    - name: Install Poetry plugin (if poetry present)
+    - name: Install Poetry plugin
       ansible.builtin.shell: |
         export PATH="/home/ubuntu/.local/bin:$PATH"
-        {{ poetry_bin }} self add poetry-plugin-shell || true
+        {{ poetry_bin }} self add poetry-plugin-shell
       args:
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Patch cffi version in requirements.txt (if present)
+    - name: Patch cffi version in requirements.txt
       ansible.builtin.replace:
         path: /home/ubuntu/attack_range/requirements.txt
         regexp: 'cffi==1.13.2'
         replace: 'cffi==1.15.1'
-      ignore_errors: yes
 
-    - name: Install Python dependencies via pip (if requirements exist)
+    - name: Install Python dependencies
       ansible.builtin.pip:
         requirements: /home/ubuntu/attack_range/requirements.txt
         executable: pip3
-      ignore_errors: yes
 
     - name: Upgrade tabulate
       ansible.builtin.pip:
         name: "tabulate>=0.8.10"
         executable: pip3
 
-    - name: Ensure attack_range directory owner is ubuntu
-      ansible.builtin.file:
-        path: /home/ubuntu/attack_range
-        owner: ubuntu
-        group: ubuntu
-        recurse: yes
-
-    - name: Create attack_range.conf from variables (idempotent)
+    - name: Copy default attack_range.conf if not present
       ansible.builtin.copy:
+        src: /home/ubuntu/attack_range/attack_range.conf.template
         dest: /home/ubuntu/attack_range/attack_range.conf
-        content: |
-          [global]
-          log_path = attack_range.log
-          log_level = INFO
-          attack_range_password = {{ attack_range_password }}
-          cloud_provider = {{ attack_range_provider }}
-
-          [aws]
-          instance_type_ec2 = {{ attack_range_instance_type | default("t2.medium") }}
-          region = {{ attack_range_region | default("ap-southeast-2") }}
-
-          [range_settings]
-          key_name = {{ attack_range_key_name | default("attack-range-key-pair") }}
-          ip_whitelist = 0.0.0.0/0
-          private_key_path = {{ attack_range_private_key | default("/home/ubuntu/.ssh/Admin123.pem") }}
-          region = {{ attack_range_region | default("ap-southeast-2") }}
-          range_name = {{ attack_range_name | default("default") }}
-
-          [environment]
-          windows_domain_controller = 1
-          windows_server = 0
-          windows_client = 0
-          kali_machine = 0
-          zeek_sensor = 0
-          phantom_server = 0
-
-          [features]
-          # Feature flags are converted from yes/no into true/false in the config
-          splunk = {{ (attack_range_splunk | bool) | ternary('true','false') }}
-          snort  = {{ (attack_range_snort  | bool) | ternary('true','false') }}
-          zeek   = {{ (attack_range_zeek   | bool) | ternary('true','false') }}
-          nginx  = {{ (attack_range_nginx  | bool) | ternary('true','false') }}
-
-          [splunk_settings]
-          splunk_url = https://download.splunk.com/products/splunk/releases/8.0.5/linux/splunk-8.0.5-a1a6394cc5ae-Linux-x86_64.tgz
-          splunk_binary = splunk-8.0.5-a1a6394cc5ae-Linux-x86_64.tgz
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
+        remote_src: yes
+        force: no
       become_user: ubuntu
 
-    - name: Ensure attack_range.conf exists (sanity)
-      ansible.builtin.stat:
+
+# ==============================
+# Second play: Configure Attack Range
+# ==============================
+- hosts: all
+  gather_facts: false
+  vars_prompt:
+    - name: attack_range_provider
+      prompt: "Enter the provider (aws/azure/local)"
+      private: no
+    - name: attack_range_region
+      prompt: "Enter the region (e.g., ap-southeast-2)"
+      private: no
+    - name: attack_range_password
+      prompt: "Enter the attack_range password"
+      private: yes
+    - name: attack_range_os
+      prompt: "Choose OS (windows/linux)"
+      private: no
+      default: "linux"
+    - name: attack_range_instance_type
+      prompt: "Enter instance type (e.g., t2.medium)"
+      private: no
+    - name: attack_range_splunk
+      prompt: "Install Splunk? (true/false)"
+      private: no
+    - name: attack_range_snort
+      prompt: "Enable Snort? (true/false)"
+      private: no
+    - name: attack_range_zeek
+      prompt: "Enable Zeek? (true/false)"
+      private: no
+    - name: attack_range_nginx
+      prompt: "Enable Nginx? (true/false)"
+      private: no
+
+  tasks:
+    - name: Set provider
+      lineinfile:
         path: /home/ubuntu/attack_range/attack_range.conf
-      register: attack_range_conf_stat
+        regexp: '^provider'
+        line: "provider = {{ attack_range_provider }}"
 
-    - name: Fail if attack_range.conf missing
-      ansible.builtin.fail:
-        msg: "attack_range.conf not found - previous step failed"
-      when: not attack_range_conf_stat.stat.exists
+    - name: Set region
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^region'
+        line: "region = {{ attack_range_region }}"
 
-    - name: Run attack_range build (use correct argument order)
-      ansible.builtin.command:
-        argv:
-          - python3
-          - attack_range.py
-          - -c
-          - attack_range.conf
-          - build
-        chdir: /home/ubuntu/attack_range
+    - name: Set password
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^attack_range_password'
+        line: "attack_range_password = {{ attack_range_password }}"
+
+    - name: Set OS
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^os'
+        line: "os = {{ attack_range_os }}"
+
+    - name: Set instance type
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^instance_type'
+        line: "instance_type = {{ attack_range_instance_type }}"
+
+    - name: Enable Splunk
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^splunk'
+        line: "splunk = {{ attack_range_splunk }}"
+
+    - name: Enable Snort
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^snort'
+        line: "snort = {{ attack_range_snort }}"
+
+    - name: Enable Zeek
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^zeek'
+        line: "zeek = {{ attack_range_zeek }}"
+
+    - name: Enable Nginx
+      lineinfile:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        regexp: '^nginx'
+        line: "nginx = {{ attack_range_nginx }}"
+
+    - name: Build attack_range
+      ansible.builtin.shell: |
+        cd /home/ubuntu/attack_range
+        python3 attack_range.py build
+      args:
+        executable: /bin/bash
       become_user: ubuntu
-      register: attack_range_build
-      failed_when: attack_range_build.rc != 0
-
-    - name: Show attack_range build stdout/stderr on failure
-      ansible.builtin.debug:
-        msg: |
-          rc={{ attack_range_build.rc }}
-          stdout={{ attack_range_build.stdout }}
-          stderr={{ attack_range_build.stderr }}
-      when: attack_range_build.rc != 0
