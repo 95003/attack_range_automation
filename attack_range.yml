@@ -9,22 +9,12 @@
     awscli_zip: "/home/ubuntu/awscliv2.zip"
     poetry_bin: "/home/ubuntu/.local/bin/poetry"
 
-    # Attack range inputs: read from env first, then allow override via extra-vars
-    attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default(attack_range_provider_default | default('aws')) }}"
-    attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default(attack_range_region_default | default('ap-southeast-2')) }}"
-    attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default(attack_range_password_default | default('changeme')) }}"
-    attack_range_os: "{{ lookup('env','ATTACK_RANGE_OS') | default(attack_range_os_default | default('linux')) }}"
-    attack_range_instance_type: "{{ lookup('env','ATTACK_RANGE_INSTANCE_TYPE') | default(attack_range_instance_type_default | default('t2.medium')) }}"
-
-    # Feature flags: yes/no (strings). Use env vars like ATTACK_RANGE_SPLUNK=yes
-    attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default(attack_range_splunk_default | default('yes')) }}"
-    attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default(attack_range_snort_default  | default('no'))  }}"
-    attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default(attack_range_zeek_default   | default('no'))  }}"
-    attack_range_nginx:  "{{ lookup('env','ATTACK_RANGE_NGINX')  | default(attack_range_nginx_default  | default('no'))  }}"
-
-    attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default(attack_range_key_name_default | default('attack-range-key-pair')) }}"
-    attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default(attack_range_private_key_default | default('/home/ubuntu/.ssh/Admin123.pem')) }}"
-    attack_range_name: "{{ lookup('env','ATTACK_RANGE_NAME') | default(attack_range_name_default | default('default')) }}"
+    attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default('aws') }}"
+    attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default('ap-southeast-2') }}"
+    attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default('changeme') }}"
+    attack_range_instance_type: "{{ lookup('env','ATTACK_RANGE_INSTANCE_TYPE') | default('t2.medium') }}"
+    attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
+    attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
 
   pre_tasks:
     - name: Wait for SSH to become available
@@ -39,63 +29,37 @@
       ansible.builtin.apt:
         update_cache: yes
         upgrade: dist
-        cache_valid_time: 3600
 
     - name: Install base packages
       ansible.builtin.apt:
         name:
           - python3.10
           - python3.10-venv
+          - python3-pip
           - git
           - unzip
-          - python3-pip
           - curl
           - zip
-        state: present
-        update_cache: yes
-
-    - name: Install Python build dependencies
-      ansible.builtin.apt:
-        name:
           - build-essential
           - libffi-dev
           - python3-dev
-          - python3-setuptools
-          - python3-wheel
         state: present
-        update_cache: yes
 
-    - name: Ensure setuptools pinned to <81 to avoid pkg_resources deprecation warning
-      ansible.builtin.pip:
-        name:
-          - "setuptools<81"
-          - pip
-          - wheel
-        executable: pip3
-        state: latest
+    - name: Upgrade pip, setuptools, and wheel
+      ansible.builtin.command: python3 -m pip install --upgrade pip setuptools wheel
 
-    - name: Upgrade pip, setuptools, and wheel (extra safety)
-      ansible.builtin.pip:
-        name:
-          - pip
-          - setuptools
-          - wheel
-        state: latest
-        executable: pip3
-
-    - name: Download Terraform binary zip
+    - name: Download Terraform
       ansible.builtin.get_url:
         url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
         dest: "{{ terraform_zip }}"
-        mode: '0644'
 
-    - name: Unarchive Terraform to /usr/local/bin
+    - name: Unpack Terraform
       ansible.builtin.unarchive:
         src: "{{ terraform_zip }}"
-        dest: "/usr/local/bin/"
+        dest: /usr/local/bin/
         remote_src: yes
       args:
-        creates: "/usr/local/bin/terraform"
+        creates: /usr/local/bin/terraform
 
     - name: Clone attack_range repo
       ansible.builtin.git:
@@ -105,228 +69,44 @@
         force: yes
       become_user: ubuntu
 
-    - name: Download AWS CLI v2
-      ansible.builtin.get_url:
-        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
-        dest: "{{ awscli_zip }}"
-        mode: '0644'
-
-    - name: Unzip AWS CLI
-      ansible.builtin.unarchive:
-        src: "{{ awscli_zip }}"
-        dest: /home/ubuntu/
-        remote_src: yes
-
     - name: Install AWS CLI
-      ansible.builtin.command:
-        cmd: ./aws/install --update
-        chdir: /home/ubuntu
+      ansible.builtin.shell: |
+        curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o {{ awscli_zip }}
+        unzip -o {{ awscli_zip }} -d /home/ubuntu/
+        sudo /home/ubuntu/aws/install --update
+      args:
         creates: /usr/local/bin/aws
 
     - name: Install Poetry
       ansible.builtin.shell: |
         curl -sSL https://install.python-poetry.org | python3 -
       args:
-        executable: /bin/bash
         creates: "{{ poetry_bin }}"
       become_user: ubuntu
 
-    - name: Add Poetry to PATH for ubuntu user
-      ansible.builtin.lineinfile:
-        path: /home/ubuntu/.bashrc
-        line: 'export PATH="/home/ubuntu/.local/bin:$PATH"'
-        create: yes
+    - name: Ensure python-terraform and hcl2 installed
+      ansible.builtin.command: python3 -m pip install python-terraform python-hcl2
+      changed_when: false
+
+    - name: Install requirements.txt
+      ansible.builtin.command: python3 -m pip install -r /home/ubuntu/attack_range/requirements.txt
       become_user: ubuntu
 
-    - name: Install Poetry plugin (if poetry present)
-      ansible.builtin.shell: |
-        export PATH="/home/ubuntu/.local/bin:$PATH"
-        {{ poetry_bin }} self add poetry-plugin-shell || true
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    # -------------------------
-    # Make requirements.txt safe: remove any ansible pin that will break pip
-    # -------------------------
-    - name: Comment out pinned ansible in requirements.txt (if present)
-      ansible.builtin.replace:
-        path: /home/ubuntu/attack_range/requirements.txt
-        regexp: '^(ansible==.*)$'
-        replace: '# \\1  # pinned removed by automation'
-      ignore_errors: yes
-
-    - name: Patch cffi version in requirements.txt (if present)
-      ansible.builtin.replace:
-        path: /home/ubuntu/attack_range/requirements.txt
-        regexp: 'cffi==1.13.2'
-        replace: 'cffi==1.15.1'
-      ignore_errors: yes
-
-    - name: Install Python dependencies from requirements (best-effort)
-      ansible.builtin.pip:
-        requirements: /home/ubuntu/attack_range/requirements.txt
-        executable: pip3
-      register: pip_requirements_result
-      ignore_errors: yes
-
-    - name: Install modern Ansible (if not provided/needed)
-      ansible.builtin.pip:
-        name: "ansible>=8.0.0"
-        executable: pip3
-        state: present
-
-    - name: Upgrade tabulate
-      ansible.builtin.pip:
-        name: "tabulate>=0.8.10"
-        executable: pip3
-
-    - name: Ensure attack_range directory ownership
-      ansible.builtin.file:
-        path: /home/ubuntu/attack_range
-        owner: ubuntu
-        group: ubuntu
-        recurse: yes
-
-    # Use the repo template as base config (only copy if missing)
-    - name: Copy attack_range.conf.template to attack_range.conf if missing
+    - name: Copy attack_range.conf
       ansible.builtin.copy:
         src: /home/ubuntu/attack_range/attack_range.conf.template
         dest: /home/ubuntu/attack_range/attack_range.conf
         owner: ubuntu
         group: ubuntu
         mode: '0644'
-      become_user: ubuntu
-      args:
-        creates: /home/ubuntu/attack_range/attack_range.conf
-      ignore_errors: yes
+      remote_src: yes
 
-    # Override selected settings safely using ini_file
-    - name: Set global attack_range_password
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: global
-        option: attack_range_password
-        value: "{{ attack_range_password }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
+    - name: Run terraform init
+      ansible.builtin.command:
+        cmd: /usr/local/bin/terraform init -input=false
+        chdir: /home/ubuntu/attack_range/terraform/aws
 
-    - name: Set cloud_provider
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: global
-        option: cloud_provider
-        value: "{{ attack_range_provider }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set AWS region
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: aws
-        option: region
-        value: "{{ attack_range_region }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set instance_type_ec2
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: aws
-        option: instance_type_ec2
-        value: "{{ attack_range_instance_type }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set range_settings.key_name
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: range_settings
-        option: key_name
-        value: "{{ attack_range_key_name }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set range_settings.private_key_path
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: range_settings
-        option: private_key_path
-        value: "{{ attack_range_private_key }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure features section exists and set flags (converted to true/false)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: features
-        option: splunk
-        value: "{{ (attack_range_splunk | bool) | ternary('true','false') }}"
-      become_user: ubuntu
-
-    - name: Set feature snort
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: features
-        option: snort
-        value: "{{ (attack_range_snort | bool) | ternary('true','false') }}"
-      become_user: ubuntu
-
-    - name: Set feature zeek
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: features
-        option: zeek
-        value: "{{ (attack_range_zeek | bool) | ternary('true','false') }}"
-      become_user: ubuntu
-
-    - name: Set feature nginx
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: features
-        option: nginx
-        value: "{{ (attack_range_nginx | bool) | ternary('true','false') }}"
-      become_user: ubuntu
-
-    # Ensure splunk-related settings exist (avoid KeyError)
-    - name: Ensure splunk_bots_dataset is present (disable by default)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_bots_dataset
-        value: '0'
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure splunk_hec_token exists (empty by default)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_hec_token
-        value: ''
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure splunk_index exists (default main)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_index
-        value: 'main'
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure attack_range.conf exists (sanity)
-      ansible.builtin.stat:
-        path: /home/ubuntu/attack_range/attack_range.conf
-      register: attack_range_conf_stat
-
-    - name: Fail if attack_range.conf missing
-      ansible.builtin.fail:
-        msg: "attack_range.conf not found - previous steps failed"
-      when: not attack_range_conf_stat.stat.exists
-
-    - name: Run attack_range build (correct argument order)
+    - name: Build attack range
       ansible.builtin.command:
         argv:
           - python3
@@ -336,13 +116,3 @@
           - build
         chdir: /home/ubuntu/attack_range
       become_user: ubuntu
-      register: attack_range_build
-      failed_when: attack_range_build.rc != 0
-
-    - name: Show attack_range build stdout/stderr on failure
-      ansible.builtin.debug:
-        msg: |
-          rc={{ attack_range_build.rc }}
-          stdout={{ attack_range_build.stdout | default('') }}
-          stderr={{ attack_range_build.stderr | default('') }}
-      when: attack_range_build.rc != 0
