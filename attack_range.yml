@@ -17,6 +17,12 @@
     attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
     attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
 
+    # ✅ Add these missing ones
+    attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default('yes', true) }}"
+    attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default('no', true) }}"
+    attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default('no', true) }}"
+    attack_range_nginx:  "{{ lookup('env','ATTACK_RANGE_NGINX')  | default('no', true) }}"
+
   pre_tasks:
     - name: Wait for SSH to become available
       ansible.builtin.wait_for_connection:
