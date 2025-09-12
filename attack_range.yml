@@ -17,7 +17,7 @@
     attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
     attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
 
-    # ✅ Add these missing ones
+    # ✅ Add these missing ones (keeps "yes"/"no" strings; default used if env not set)
     attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default('yes', true) }}"
     attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default('no', true) }}"
     attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default('no', true) }}"
@@ -131,7 +131,7 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    # --- sanify the repo requirements before installing ---
+    # --- sanitize the repo requirements before installing ---
     - name: Comment out pinned ansible in requirements.txt (if present)
       ansible.builtin.replace:
         path: /home/ubuntu/attack_range/requirements.txt
@@ -297,6 +297,13 @@
       when: terraform_aws_dir.stat.exists
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc != 0 and terraform_init.rc != 1
+
+    # <<--- NEW TASK: fix tabulate import error on Python 3.10 ---->>
+    - name: Upgrade tabulate to fix Python 3.10 compatibility
+      ansible.builtin.pip:
+        name: "tabulate>=0.9.0"
+        executable: pip3
+        state: present
 
     - name: Run attack_range build (correct argument order)
       ansible.builtin.command:
