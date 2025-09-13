@@ -1,5 +1,5 @@
 ---
-- name: Setup Splunk Attack Range (fully automated)
+- name: Setup Splunk Attack Range (fully automated, venv-based)
   hosts: attack_range
   become: yes
   gather_facts: false
@@ -7,7 +7,6 @@
     terraform_version: "1.9.8"
     terraform_zip: "/home/ubuntu/terraform.zip"
     awscli_zip: "/home/ubuntu/awscliv2.zip"
-    poetry_bin: "/home/ubuntu/.local/bin/poetry"
 
     attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default('aws') }}"
     attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default('ap-southeast-2') }}"
@@ -110,31 +109,8 @@
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
 
-    - name: Install Poetry for ubuntu user
-      ansible.builtin.shell: |
-        curl -sSL https://install.python-poetry.org | python3 -
-      args:
-        executable: /bin/bash
-        creates: "{{ poetry_bin }}"
-      become_user: ubuntu
-
-    - name: Add Poetry to PATH
-      ansible.builtin.lineinfile:
-        path: /home/ubuntu/.bashrc
-        line: 'export PATH="/home/ubuntu/.local/bin:$PATH"'
-        create: yes
-      become_user: ubuntu
-
-    - name: Install Poetry plugin
-      ansible.builtin.shell: |
-        export PATH="/home/ubuntu/.local/bin:$PATH"
-        {{ poetry_bin }} self add poetry-plugin-shell || true
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    # Patch requirements before install
-    - name: Unpin ansible version if present
+    # -------- REPLACED POETRY WITH VENV --------
+    - name: Patch requirements.txt (remove ansible pin & fix cffi)
       ansible.builtin.replace:
         path: /home/ubuntu/attack_range/requirements.txt
         regexp: '^(ansible==.*)$'
@@ -148,19 +124,24 @@
         replace: 'cffi==1.15.1'
       ignore_errors: yes
 
-    - name: Install python-terraform & hcl2 (pinned for Python 3.10)
-      ansible.builtin.pip:
-        name:
-          - "python-terraform==0.10.1"
-          - "python-hcl2==4.3.3"
-        executable: pip3
-        state: present
-
-    - name: Install Python dependencies from requirements.txt
+    - name: Create virtual environment
       ansible.builtin.command:
-        cmd: python3 -m pip install -r /home/ubuntu/attack_range/requirements.txt
-      register: pip_requirements_result
-      failed_when: pip_requirements_result.rc != 0
+        cmd: python3 -m venv /home/ubuntu/attack_range/venv
+      args:
+        creates: /home/ubuntu/attack_range/venv
+      become_user: ubuntu
+
+    - name: Install dependencies inside venv
+      ansible.builtin.shell: |
+        source /home/ubuntu/attack_range/venv/bin/activate
+        pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install --upgrade "tabulate>=0.8.10"
+        pip install "python-terraform==0.10.1" "python-hcl2==4.3.3"
+      args:
+        chdir: /home/ubuntu/attack_range
+        executable: /bin/bash
+      become_user: ubuntu
 
     - name: Ensure attack_range.conf exists
       ansible.builtin.command:
@@ -184,19 +165,18 @@
         value: "{{ attack_range_region }}"
       become_user: ubuntu
 
-    - name: Terraform init (ensure .terraform dir exists)
+    - name: Terraform init
       ansible.builtin.command:
         cmd: /usr/local/bin/terraform init -input=false
         chdir: /home/ubuntu/attack_range/terraform/aws
       register: terraform_init
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc != 0 and terraform_init.rc != 1
-      ignore_errors: no
 
-    - name: Run attack_range build with debug
+    - name: Run attack_range build with debug (venv)
       ansible.builtin.shell: |
-        export PATH="/usr/local/bin:$PATH"
-        python3 attack_range.py -c attack_range.conf build --debug
+        source /home/ubuntu/attack_range/venv/bin/activate
+        python attack_range.py -c attack_range.conf build --debug
       args:
         chdir: /home/ubuntu/attack_range
         executable: /bin/bash
