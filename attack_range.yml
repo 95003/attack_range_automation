@@ -1,5 +1,5 @@
 ---
-- name: Setup Splunk Attack Range (fixed)
+- name: Setup Splunk Attack Range (fully automated)
   hosts: attack_range
   become: yes
   gather_facts: false
@@ -9,7 +9,6 @@
     awscli_zip: "/home/ubuntu/awscliv2.zip"
     poetry_bin: "/home/ubuntu/.local/bin/poetry"
 
-    # Attack range inputs (can be overridden via env/extra-vars)
     attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default('aws') }}"
     attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default('ap-southeast-2') }}"
     attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default('changeme') }}"
@@ -17,7 +16,6 @@
     attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
     attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
 
-    # ✅ Add these missing ones (keeps "yes"/"no" strings; default used if env not set)
     attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default('yes', true) }}"
     attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default('no', true) }}"
     attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default('no', true) }}"
@@ -38,7 +36,7 @@
         upgrade: dist
         cache_valid_time: 3600
 
-    - name: Install base & build packages
+    - name: Install base packages
       ansible.builtin.apt:
         name:
           - python3.10
@@ -55,20 +53,17 @@
         state: present
         update_cache: yes
 
-    # Ensure pip tooling is modern so building legacy wheels works
-    - name: Upgrade pip, setuptools, wheel (use python3 -m pip)
+    - name: Upgrade pip/setuptools/wheel
       ansible.builtin.command:
         cmd: python3 -m pip install --upgrade pip setuptools wheel
       changed_when: false
 
-    # Pre-install known-good packages that would otherwise trigger build errors
-    - name: Pre-install compatible MarkupSafe and cffi (prevent build issues)
+    - name: Pre-install compatible packages to avoid build issues
       ansible.builtin.command:
-        cmd: python3 -m pip install "MarkupSafe==2.0.1" "cffi==1.15.1" python-terraform python-hcl2
-      register: preinstall_pip
-      changed_when: "'Successfully installed' in preinstall_pip.stdout or 'Requirement already satisfied' in preinstall_pip.stdout"
+        cmd: python3 -m pip install "MarkupSafe==2.0.1" "cffi==1.15.1"
+      changed_when: false
 
-    - name: Download Terraform binary zip
+    - name: Install Terraform
       ansible.builtin.get_url:
         url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
         dest: "{{ terraform_zip }}"
@@ -82,6 +77,13 @@
       args:
         creates: "/usr/local/bin/terraform"
 
+    - name: Ensure terraform is in PATH
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'export PATH="/usr/local/bin:$PATH"'
+        create: yes
+      become_user: ubuntu
+
     - name: Clone attack_range repo
       ansible.builtin.git:
         repo: https://github.com/splunk/attack_range.git
@@ -90,7 +92,7 @@
         force: yes
       become_user: ubuntu
 
-    - name: Download AWS CLI v2
+    - name: Download and install AWS CLI v2
       ansible.builtin.get_url:
         url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
         dest: "{{ awscli_zip }}"
@@ -108,7 +110,7 @@
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
 
-    - name: Install Poetry (user ubuntu)
+    - name: Install Poetry for ubuntu user
       ansible.builtin.shell: |
         curl -sSL https://install.python-poetry.org | python3 -
       args:
@@ -116,14 +118,14 @@
         creates: "{{ poetry_bin }}"
       become_user: ubuntu
 
-    - name: Add Poetry to PATH for ubuntu user
+    - name: Add Poetry to PATH
       ansible.builtin.lineinfile:
         path: /home/ubuntu/.bashrc
         line: 'export PATH="/home/ubuntu/.local/bin:$PATH"'
         create: yes
       become_user: ubuntu
 
-    - name: Install Poetry plugin (if poetry present)
+    - name: Install Poetry plugin
       ansible.builtin.shell: |
         export PATH="/home/ubuntu/.local/bin:$PATH"
         {{ poetry_bin }} self add poetry-plugin-shell || true
@@ -131,189 +133,22 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    # --- sanitize the repo requirements before installing ---
-    - name: Comment out pinned ansible in requirements.txt (if present)
+    # Patch requirements before install
+    - name: Unpin ansible version if present
       ansible.builtin.replace:
         path: /home/ubuntu/attack_range/requirements.txt
         regexp: '^(ansible==.*)$'
-        replace: '# \\1  # pinned removed by automation'
+        replace: '# \1'
       ignore_errors: yes
 
-    - name: Patch cffi version in requirements.txt (if present)
+    - name: Patch cffi version in requirements.txt
       ansible.builtin.replace:
         path: /home/ubuntu/attack_range/requirements.txt
         regexp: 'cffi==1.13.2'
         replace: 'cffi==1.15.1'
       ignore_errors: yes
 
-    # Install the repo requirements using python3 -m pip (system-wide)
-    - name: Install Python dependencies from requirements (fail on error)
-      ansible.builtin.command:
-        cmd: python3 -m pip install -r /home/ubuntu/attack_range/requirements.txt
-      register: pip_requirements_result
-      failed_when: pip_requirements_result.rc != 0
-      changed_when: "'Successfully installed' in pip_requirements_result.stdout"
-
-    - name: Ensure attack_range directory ownership
-      ansible.builtin.file:
-        path: /home/ubuntu/attack_range
-        owner: ubuntu
-        group: ubuntu
-        recurse: yes
-
-    # Copy on the remote (template exists in the cloned repo) - use remote cp to avoid controller/remote confusion
-    - name: Copy attack_range.conf.template -> attack_range.conf (remote)
-      ansible.builtin.command:
-        cmd: /bin/sh -c 'cp -n /home/ubuntu/attack_range/attack_range.conf.template /home/ubuntu/attack_range/attack_range.conf'
-      args:
-        creates: /home/ubuntu/attack_range/attack_range.conf
-      become_user: ubuntu
-
-    # Make sure config exists
-    - name: Ensure attack_range.conf exists (sanity)
-      ansible.builtin.stat:
-        path: /home/ubuntu/attack_range/attack_range.conf
-      register: attack_range_conf_stat
-
-    - name: Fail if attack_range.conf missing
-      ansible.builtin.fail:
-        msg: "attack_range.conf not found - previous steps failed"
-      when: not attack_range_conf_stat.stat.exists
-
-    # Override selected settings safely using ini_file
-    - name: Set global attack_range_password
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: global
-        option: attack_range_password
-        value: "{{ attack_range_password }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set cloud_provider
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: global
-        option: cloud_provider
-        value: "{{ attack_range_provider }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set AWS region
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: aws
-        option: region
-        value: "{{ attack_range_region }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set instance_type_ec2
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: aws
-        option: instance_type_ec2
-        value: "{{ attack_range_instance_type }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set range_settings.key_name
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: range_settings
-        option: key_name
-        value: "{{ attack_range_key_name }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Set range_settings.private_key_path
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: range_settings
-        option: private_key_path
-        value: "{{ attack_range_private_key }}"
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure features section exists and set flags (converted to true/false)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: features
-        option: splunk
-        value: "{{ (attack_range_splunk | bool) | ternary('true','false') }}"
-      become_user: ubuntu
-
-    - name: Ensure splunk_bots_dataset is present (disable by default)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_bots_dataset
-        value: '0'
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure splunk_hec_token exists (empty by default)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_hec_token
-        value: ''
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    - name: Ensure splunk_index exists (default main)
-      ansible.builtin.ini_file:
-        path: /home/ubuntu/attack_range/attack_range.conf
-        section: splunk_settings
-        option: splunk_index
-        value: 'main'
-        no_extra_spaces: yes
-      become_user: ubuntu
-
-    # Ensure python-terraform + hcl parser (if not installed earlier)
-    - name: Ensure python-terraform and python-hcl2 present
-      ansible.builtin.command:
-        cmd: python3 -m pip install python-terraform python-hcl2
-      changed_when: false
-
-    # Verify terraform binary exists
-    - name: Verify terraform binary exists
-      ansible.builtin.command:
-        cmd: /usr/local/bin/terraform -version
-      register: terraform_version
-      failed_when: terraform_version.rc != 0
-
-    # Run terraform init if module dir exists
-    - name: Check for terraform/aws directory
-      ansible.builtin.stat:
-        path: /home/ubuntu/attack_range/terraform/aws
-      register: terraform_aws_dir
-
-    - name: Run terraform init in terraform/aws (if present)
-      ansible.builtin.command:
-        cmd: /usr/local/bin/terraform init -input=false
-        chdir: /home/ubuntu/attack_range/terraform/aws
-      register: terraform_init
-      when: terraform_aws_dir.stat.exists
-      changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
-      failed_when: terraform_init.rc != 0 and terraform_init.rc != 1
-
-    # <<--- NEW TASK: fix tabulate import error on Python 3.10 ---->>
-    - name: Upgrade tabulate to fix Python 3.10 compatibility
-      ansible.builtin.pip:
-        name: "tabulate>=0.9.0"
-        executable: pip3
-        state: present
-
-        # <<--- NEW TASK: fix tabulate import error on Python 3.10 ---->>
-    - name: Upgrade tabulate to fix Python 3.10 compatibility
-      ansible.builtin.pip:
-        name: "tabulate>=0.9.0"
-        executable: pip3
-        state: present
-
-    # <<--- NEW TASK: ensure compatible python-terraform/hcl2 ---->>
-    - name: Pin compatible python-terraform & python-hcl2
+    - name: Install python-terraform & hcl2 (pinned for Python 3.10)
       ansible.builtin.pip:
         name:
           - "python-terraform==0.10.1"
@@ -321,20 +156,55 @@
         executable: pip3
         state: present
 
-    - name: Run attack_range build (correct argument order)
+    - name: Install Python dependencies from requirements.txt
       ansible.builtin.command:
-        argv:
-          - python3
-          - attack_range.py
-          - -c
-          - attack_range.conf
-          - build
+        cmd: python3 -m pip install -r /home/ubuntu/attack_range/requirements.txt
+      register: pip_requirements_result
+      failed_when: pip_requirements_result.rc != 0
+
+    - name: Ensure attack_range.conf exists
+      ansible.builtin.command:
+        cmd: cp -n attack_range.conf.template attack_range.conf
         chdir: /home/ubuntu/attack_range
+      become_user: ubuntu
+
+    - name: Configure attack_range.conf values
+      ansible.builtin.ini_file:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        section: global
+        option: cloud_provider
+        value: "{{ attack_range_provider }}"
+      become_user: ubuntu
+
+    - name: Configure AWS region
+      ansible.builtin.ini_file:
+        path: /home/ubuntu/attack_range/attack_range.conf
+        section: aws
+        option: region
+        value: "{{ attack_range_region }}"
+      become_user: ubuntu
+
+    - name: Terraform init (ensure .terraform dir exists)
+      ansible.builtin.command:
+        cmd: /usr/local/bin/terraform init -input=false
+        chdir: /home/ubuntu/attack_range/terraform/aws
+      register: terraform_init
+      changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
+      failed_when: terraform_init.rc != 0 and terraform_init.rc != 1
+      ignore_errors: no
+
+    - name: Run attack_range build with debug
+      ansible.builtin.shell: |
+        export PATH="/usr/local/bin:$PATH"
+        python3 attack_range.py -c attack_range.conf build --debug
+      args:
+        chdir: /home/ubuntu/attack_range
+        executable: /bin/bash
       become_user: ubuntu
       register: attack_range_build
       failed_when: attack_range_build.rc != 0
 
-    - name: Show attack_range build stdout/stderr on failure
+    - name: Show build logs if failed
       ansible.builtin.debug:
         msg: |
           rc={{ attack_range_build.rc }}
