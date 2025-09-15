@@ -136,6 +136,14 @@
       ignore_errors: yes
       become_user: ubuntu
 
+    - name: Patch splunk-sdk version (use newer release)
+      ansible.builtin.replace:
+        path: "{{ repo_dir }}/requirements.txt"
+        regexp: '^splunk-sdk==.*$'
+        replace: 'splunk-sdk==2.0.1'
+      ignore_errors: yes
+      become_user: ubuntu
+
     - name: Create virtual environment
       ansible.builtin.command:
         cmd: python3 -m venv "{{ venv_path }}"
@@ -151,6 +159,14 @@
       args:
         executable: /bin/bash
       become_user: ubuntu
+
+    - name: Patch splunk-sdk version (use newer release)
+      ansible.builtin.replace:
+        path: "{{ repo_dir }}/requirements.txt"
+        regexp: '^splunk-sdk==.*$'
+        replace: 'splunk-sdk==2.0.1'
+      ignore_errors: yes
+      become_user: ubuntu  
 
     - name: Install python dependencies inside venv
       ansible.builtin.shell: |
