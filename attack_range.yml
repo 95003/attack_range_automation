@@ -52,10 +52,11 @@
         state: present
         update_cache: yes
 
-    - name: Upgrade pip/setuptools/wheel
+    - name: Upgrade pip/setuptools/wheel (allow system upgrade)
       ansible.builtin.command:
-        cmd: python3 -m pip install --upgrade pip setuptools wheel
+        cmd: python3 -m pip install --upgrade pip setuptools wheel --break-system-packages
       changed_when: false
+
 
 
     - name: Pre-install compatible packages to avoid build issues
