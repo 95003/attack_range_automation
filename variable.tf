@@ -1,10 +1,22 @@
+variable "aws_access_key" {
+  description = "AWS Access Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "aws_secret_key" {
+  description = "AWS Secret Key"
+  type        = string
+  sensitive   = true
+}
+
 variable "key_name" {
-  description = "Name of the existing AWS key pair to use for EC2 instance"
+  description = "AWS EC2 Key Pair Name"
   type        = string
 }
 
 variable "volume_size" {
-  description = "Size of root volume in GB"
+  description = "Root volume size in GB"
   type        = number
   default     = 50
 }

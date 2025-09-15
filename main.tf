@@ -17,6 +17,8 @@ terraform {
 
 provider "aws" {
   region = "ap-southeast-2"
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
 }
 
 resource "random_id" "suffix" {
@@ -30,7 +32,7 @@ data "aws_ami" "ubuntu" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-noble-24.04-amd64-*"]
   }
 
   filter {

@@ -1,4 +1,5 @@
-# Ignore sensitive files
+# Terraform files
+*.tfstate
+*.tfstate.backup
+.terraform/
 terraform.tfvars
-keys/
-inventory.ini
