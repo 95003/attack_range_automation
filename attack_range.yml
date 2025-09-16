@@ -37,7 +37,7 @@
         upgrade: dist
         cache_valid_time: 3600
 
-    - name: Install base packages (use default python3 for Ubuntu 24+)
+    - name: Install base packages
       ansible.builtin.apt:
         name:
           - python3
@@ -52,30 +52,17 @@
           - libffi-dev
           - libssl-dev
           - python3-dev
+          - dos2unix
         state: present
         update_cache: yes
 
-    # do NOT upgrade system pip globally (PEP 668); use venv instead
-    - name: Pre-install packages required outside venv (if any)
-      ansible.builtin.apt:
-        name:
-          - dos2unix
-        state: present
-      changed_when: false
-
-    - name: Pre-install compatible packages (use pip inside venv later) - noop here to keep structure
-      ansible.builtin.debug:
-        msg: "Will install MarkupSafe/cffi inside the venv later."
-
-    - name: Install Terraform zip
+    - name: Download Terraform
       ansible.builtin.get_url:
         url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
         dest: "{{ terraform_zip }}"
         mode: '0644'
-      register: tfzip
-      changed_when: tfzip is defined
 
-    - name: Unarchive Terraform to /usr/local/bin
+    - name: Unarchive Terraform
       ansible.builtin.unarchive:
         src: "{{ terraform_zip }}"
         dest: "/usr/local/bin/"
@@ -83,7 +70,7 @@
       args:
         creates: "/usr/local/bin/terraform"
 
-    - name: Ensure terraform is in PATH for ubuntu user
+    - name: Ensure terraform is in PATH
       ansible.builtin.lineinfile:
         path: /home/ubuntu/.bashrc
         line: 'export PATH="/usr/local/bin:$PATH"'
@@ -97,10 +84,6 @@
         version: master
         force: yes
       become_user: ubuntu
-
-    - name: small pause after clone
-      ansible.builtin.pause:
-        seconds: 2
 
     - name: Download AWS CLI v2
       ansible.builtin.get_url:
@@ -124,7 +107,7 @@
       ansible.builtin.replace:
         path: "{{ repo_dir }}/requirements.txt"
         regexp: '^(ansible==.*)$'
-        replace: '# \\1'
+        replace: '# \1'
       ignore_errors: yes
       become_user: ubuntu
 
@@ -136,7 +119,7 @@
       ignore_errors: yes
       become_user: ubuntu
 
-    - name: Patch splunk-sdk version (use newer release)
+    - name: Patch splunk-sdk version
       ansible.builtin.replace:
         path: "{{ repo_dir }}/requirements.txt"
         regexp: '^splunk-sdk==.*$'
@@ -151,7 +134,7 @@
         creates: "{{ venv_path }}"
       become_user: ubuntu
 
-    - name: Ensure venv pip is up-to-date
+    - name: Upgrade venv pip/setuptools/wheel
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
@@ -160,13 +143,15 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Patch splunk-sdk version (use newer release)
-      ansible.builtin.replace:
-        path: "{{ repo_dir }}/requirements.txt"
-        regexp: '^splunk-sdk==.*$'
-        replace: 'splunk-sdk==2.0.1'
-      ignore_errors: yes
-      become_user: ubuntu  
+    - name: Pin urllib3<2 and reinstall boto3/botocore
+      ansible.builtin.shell: |
+        set -e
+        source "{{ venv_path }}/bin/activate"
+        pip install --upgrade "urllib3<2"
+        pip install --force-reinstall --no-cache-dir boto3 botocore
+      args:
+        executable: /bin/bash
+      become_user: ubuntu
 
     - name: Install python dependencies inside venv
       ansible.builtin.shell: |
@@ -203,7 +188,7 @@
         value: "{{ attack_range_region }}"
       become_user: ubuntu
 
-    - name: Terraform init in attack_range terraform/aws
+    - name: Terraform init
       ansible.builtin.command:
         cmd: /usr/local/bin/terraform init -input=false
         chdir: "{{ repo_dir }}/terraform/aws"
@@ -211,7 +196,7 @@
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc not in [0,1]
 
-    - name: Run attack_range build with debug (inside venv)
+    - name: Run attack_range build with debug
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
