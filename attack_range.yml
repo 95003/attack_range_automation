@@ -12,7 +12,7 @@
 
     attack_range_provider: "{{ lookup('env','ATTACK_RANGE_PROVIDER') | default('aws') }}"
     attack_range_region: "{{ lookup('env','ATTACK_RANGE_REGION') | default('ap-southeast-2') }}"
-    attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default('changeme') }}"
+    attack_range_password: "{{ lookup('env','ATTACK_RANGE_PASSWORD') | default('Admin123') }}"
     attack_range_instance_type: "{{ lookup('env','ATTACK_RANGE_INSTANCE_TYPE') | default('t2.medium') }}"
     attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
     attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
@@ -222,6 +222,35 @@
         dest: "{{ repo_dir }}/attack_range.yml"
         remote_src: yes
         force: no
+
+    - name: Run attack_range configure with predefined answers
+      ansible.builtin.expect:
+        command: >
+          bash -c "source {{ venv_path }}/bin/activate &&
+          cd {{ repo_dir }} &&
+          python attack_range.py configure"
+        responses:
+          'Select cloud provider': "{{ attack_range_provider }}\n"
+          'Enter a master password': "{{ attack_range_password }}\n"
+          'would you like to use it': "Yes\n"
+          'Enter region to build in': "{{ attack_range_region }}\n"
+          'Enter public ips that are allowed': "0.0.0.0/0\n"
+          'Enter attack_range name': "ar_Attack\n"
+          'Shall we build a windows server': "Yes\n"
+          'which version should it be': "2022\n"
+          'Should the windows server be a domain controller': "Yes\n"
+          'Should we install red team tools on the windows server': "Yes\n"
+          'Should we install badblood': "Yes\n"
+          'Shall we build a linux server': "Yes\n"
+          'Shall we build a kali linux machine': "Yes\n"
+          'Shall we build nginx plus web proxy': "Yes\n"
+          'Shall we build zeek server': "Yes\n"
+          'Shall we build snort server': "Yes\n"
+          'Shall we include Splunk SOAR': "No\n"
+      args:
+        chdir: "{{ repo_dir }}"
+      become_user: ubuntu
+
 
     - name: Set cloud provider in attack_range.yml
       ansible.builtin.lineinfile:
