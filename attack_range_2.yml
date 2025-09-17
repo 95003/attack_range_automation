@@ -106,7 +106,7 @@
         group: "{{ ansible_user_id | default(ansible_user) }}"
         mode: '0644'
   
-    - name: Run exact commands in project dir
+    - name: Install Poetry and run project commands (run in /root/attack_range)
       shell: |
         curl -sSL https://install.python-poetry.org/ | python3 -
         export PATH="/root/.local/bin:$PATH"
