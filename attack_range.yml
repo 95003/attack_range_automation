@@ -77,13 +77,24 @@
         create: yes
       become_user: ubuntu
 
-    - name: Clone attack_range repo
+    - name: Clone attack_range repo (pin to stable tag)
       ansible.builtin.git:
         repo: https://github.com/splunk/attack_range.git
         dest: "{{ repo_dir }}"
-        version: master
+        version: v3.0.8    # <-- Pin to stable tested release
         force: yes
       become_user: ubuntu
+
+    - name: Verify terraform binary is available
+      ansible.builtin.command: terraform version
+      register: terraform_version_check
+      failed_when: terraform_version_check.rc != 0
+      changed_when: false
+
+    - name: Show terraform version
+      ansible.builtin.debug:
+        msg: "{{ terraform_version_check.stdout }}"
+      changed_when: false
 
     - name: Download AWS CLI v2
       ansible.builtin.get_url:
@@ -156,6 +167,15 @@
         executable: /bin/bash
       become_user: ubuntu
 
+    - name: Force reinstall python-terraform & python-hcl2 (ensure fresh)
+      ansible.builtin.shell: |
+        set -e
+        source "{{ venv_path }}/bin/activate"
+        pip install --force-reinstall --no-cache-dir "python-terraform==0.10.1" "python-hcl2==4.3.3"
+      args:
+        executable: /bin/bash
+      become_user: ubuntu
+
     - name: Fix wrapt for Python 3.12
       ansible.builtin.shell: |
         set -e
@@ -223,9 +243,13 @@
       args:
         chdir: "{{ repo_dir }}"
         executable: /bin/bash
+      environment:
+        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
       become_user: ubuntu
       register: attack_range_build
-      failed_when: attack_range_build.rc != 0
+      retries: 3
+      delay: 30
+      until: attack_range_build.rc == 0
 
     - name: Show build logs if failed
       ansible.builtin.debug:
