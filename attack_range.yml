@@ -143,16 +143,6 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Pin urllib3<2 and reinstall boto3/botocore
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --upgrade "urllib3<2"
-        pip install --force-reinstall --no-cache-dir boto3 botocore
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
     - name: Install python dependencies inside venv
       ansible.builtin.shell: |
         set -e
@@ -163,6 +153,18 @@
         pip install "python-terraform==0.10.1" "python-hcl2==4.3.3"
       args:
         chdir: "{{ repo_dir }}"
+        executable: /bin/bash
+      become_user: ubuntu
+
+    # 🔧 FIX: force pin urllib3<2 AFTER installing dependencies
+    - name: Force pin urllib3<2 and reinstall boto3/botocore AFTER requirements
+      ansible.builtin.shell: |
+        set -e
+        source "{{ venv_path }}/bin/activate"
+        pip install --force-reinstall --no-cache-dir "urllib3<2"
+        pip install --force-reinstall --no-cache-dir boto3 botocore
+        python -c "import urllib3, boto3, botocore; print('✅ urllib3:', urllib3.__version__, 'boto3:', boto3.__version__, 'botocore:', botocore.__version__)"
+      args:
         executable: /bin/bash
       become_user: ubuntu
 
@@ -196,7 +198,6 @@
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc not in [0,1]
 
-    # 🔥 NEW TASK ADDED HERE
     - name: Run attack_range configure with predefined answers
       ansible.builtin.expect:
         command: >
