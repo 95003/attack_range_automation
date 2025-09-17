@@ -156,7 +156,7 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Fix wrapt for Python 3.12   # ⬅️ ADD THIS RIGHT HERE
+    - name: Fix wrapt for Python 3.12
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
@@ -165,7 +165,6 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    # 🔧 FIX: force pin urllib3<2 AFTER installing dependencies
     - name: Force pin urllib3<2 and reinstall boto3/botocore AFTER requirements
       ansible.builtin.shell: |
         set -e
@@ -206,34 +205,6 @@
       register: terraform_init
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc not in [0,1]
-
-    - name: Run attack_range configure with predefined answers
-      ansible.builtin.expect:
-        command: >
-          bash -c "source {{ venv_path }}/bin/activate &&
-          cd {{ repo_dir }} &&
-          python attack_range.py configure"
-        responses:
-          'Select cloud provider': "aws"
-          'Enter a master password': "Admin123"
-          'would you like to use it': "Yes"
-          'Enter region to build in': "ap-southeast-2"
-          'Enter public ips that are allowed': "0.0.0.0/0"
-          'Enter attack_range name': "ar_Attack"
-          'Shall we build a windows server': "Yes"
-          'which version should it be': "2022"
-          'Should the windows server be a domain controller': "Yes"
-          'Should we install red team tools on the windows server': "Yes"
-          'Should we install badblood': "Yes"
-          'Shall we build a linux server': "Yes"
-          'Shall we build a kali linux machine': "Yes"
-          'Shall we build nginx plus web proxy': "Yes"
-          'Shall we build zeek server': "Yes"
-          'Shall we build snort server': "Yes"
-          'Shall we include Splunk SOAR': "No"
-      args:
-        chdir: "{{ repo_dir }}"
-      become_user: ubuntu
 
     - name: Run attack_range build with debug
       ansible.builtin.shell: |
