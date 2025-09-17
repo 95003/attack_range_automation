@@ -198,6 +198,14 @@
         value: "{{ attack_range_region }}"
       become_user: ubuntu
 
+    - name: Configure attack_range.conf - attack_range_password
+      ansible.builtin.ini_file:
+        path: "{{ repo_dir }}/attack_range.conf"
+        section: global
+        option: attack_range_password
+        value: "{{ attack_range_password }}"
+      become_user: ubuntu
+
     - name: Terraform init
       ansible.builtin.command:
         cmd: /usr/local/bin/terraform init -input=false
