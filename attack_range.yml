@@ -215,34 +215,33 @@
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Ensure attack_range.conf exists
-      ansible.builtin.command:
-        cmd: cp -n attack_range.conf.template attack_range.conf
-        chdir: "{{ repo_dir }}"
+    # ✅ Replace old attack_range.conf section with this:
+    - name: Ensure attack_range.yml exists from default template
+      ansible.builtin.copy:
+        src: "{{ repo_dir }}/configs/attack_range_default.yml"
+        dest: "{{ repo_dir }}/attack_range.yml"
+        remote_src: yes
+        force: no
+
+    - name: Set cloud provider in attack_range.yml
+      ansible.builtin.lineinfile:
+        path: "{{ repo_dir }}/attack_range.yml"
+        regexp: '^cloud_provider:.*'
+        line: "cloud_provider: {{ attack_range_provider }}"
       become_user: ubuntu
 
-    - name: Configure attack_range.conf - cloud_provider
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: global
-        option: cloud_provider
-        value: "{{ attack_range_provider }}"
+    - name: Set AWS region in attack_range.yml
+      ansible.builtin.lineinfile:
+        path: "{{ repo_dir }}/attack_range.yml"
+        regexp: '^region:.*'
+        line: "region: {{ attack_range_region }}"
       become_user: ubuntu
 
-    - name: Configure attack_range.conf - aws region
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: aws
-        option: region
-        value: "{{ attack_range_region }}"
-      become_user: ubuntu
-
-    - name: Configure attack_range.conf - attack_range_password
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: global
-        option: attack_range_password
-        value: "{{ attack_range_password }}"
+    - name: Set password in attack_range.yml
+      ansible.builtin.lineinfile:
+        path: "{{ repo_dir }}/attack_range.yml"
+        regexp: '^attack_range_password:.*'
+        line: "attack_range_password: {{ attack_range_password }}"
       become_user: ubuntu
 
     - name: Terraform init
