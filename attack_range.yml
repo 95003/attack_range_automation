@@ -1,8 +1,9 @@
 ---
-- name: Setup Splunk Attack Range (fully automated, venv-based)
+- name: Setup Splunk Attack Range (fully automated, venv-based, v4.x)
   hosts: attack_range
   become: yes
   gather_facts: false
+
   vars:
     terraform_version: "1.9.8"
     terraform_zip: "/home/ubuntu/terraform.zip"
@@ -16,11 +17,6 @@
     attack_range_instance_type: "{{ lookup('env','ATTACK_RANGE_INSTANCE_TYPE') | default('t2.medium') }}"
     attack_range_key_name: "{{ lookup('env','ATTACK_RANGE_KEY_NAME') | default('attack-range-key-pair') }}"
     attack_range_private_key: "{{ lookup('env','ATTACK_RANGE_PRIVATE_KEY') | default('/home/ubuntu/.ssh/Admin123.pem') }}"
-
-    attack_range_splunk: "{{ lookup('env','ATTACK_RANGE_SPLUNK') | default('yes', true) }}"
-    attack_range_snort:  "{{ lookup('env','ATTACK_RANGE_SNORT')  | default('no', true) }}"
-    attack_range_zeek:   "{{ lookup('env','ATTACK_RANGE_ZEEK')   | default('no', true) }}"
-    attack_range_nginx:  "{{ lookup('env','ATTACK_RANGE_NGINX')  | default('no', true) }}"
 
   pre_tasks:
     - name: Wait for SSH to become available
@@ -77,7 +73,7 @@
         create: yes
       become_user: ubuntu
 
-    - name: Clone attack_range repo (pin to latest stable release v4.0.0)
+    - name: Clone attack_range repo (v4.0.0)
       ansible.builtin.git:
         repo: "https://github.com/splunk/attack_range.git"
         dest: "{{ repo_dir }}"
@@ -85,17 +81,14 @@
         force: yes
       become_user: ubuntu
 
-
     - name: Verify terraform binary is available
       ansible.builtin.command: terraform version
       register: terraform_version_check
-      failed_when: terraform_version_check.rc != 0
       changed_when: false
 
     - name: Show terraform version
       ansible.builtin.debug:
         msg: "{{ terraform_version_check.stdout }}"
-      changed_when: false
 
     - name: Download AWS CLI v2
       ansible.builtin.get_url:
@@ -115,29 +108,12 @@
         chdir: /home/ubuntu
         creates: /usr/local/bin/aws
 
-    - name: Patch requirements.txt (remove ansible pin & fix cffi)
-      ansible.builtin.replace:
-        path: "{{ repo_dir }}/requirements.txt"
-        regexp: '^(ansible==.*)$'
-        replace: '# \1'
-      ignore_errors: yes
-      become_user: ubuntu
-
-    - name: Patch cffi version in requirements.txt
+    - name: Patch requirements.txt for Python 3.12 compatibility
       ansible.builtin.replace:
         path: "{{ repo_dir }}/requirements.txt"
         regexp: 'cffi==1.13.2'
         replace: 'cffi==1.15.1'
       ignore_errors: yes
-      become_user: ubuntu
-
-    - name: Patch splunk-sdk version
-      ansible.builtin.replace:
-        path: "{{ repo_dir }}/requirements.txt"
-        regexp: '^splunk-sdk==.*$'
-        replace: 'splunk-sdk==2.0.1'
-      ignore_errors: yes
-      become_user: ubuntu
 
     - name: Create virtual environment
       ansible.builtin.command:
@@ -146,104 +122,36 @@
         creates: "{{ venv_path }}"
       become_user: ubuntu
 
-    - name: Upgrade venv pip/setuptools/wheel
+    - name: Upgrade pip/setuptools/wheel
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
-        python -m pip install --upgrade pip setuptools wheel
+        pip install --upgrade pip setuptools wheel
       args:
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Install python dependencies inside venv
+    - name: Install python dependencies in venv
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
         cd "{{ repo_dir }}"
         pip install -r requirements.txt
-        pip install --upgrade "tabulate>=0.9.0"
         pip install "python-terraform==0.10.1" "python-hcl2==4.3.3"
-      args:
-        chdir: "{{ repo_dir }}"
-        executable: /bin/bash
-      become_user: ubuntu
-
-    - name: Ensure six is installed in venv before installing python-terraform
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --upgrade six
+        pip install --upgrade "tabulate>=0.9.0" "wrapt>=1.15.0"
+        pip install --upgrade "six"
+        pip install --force-reinstall --no-cache-dir "urllib3<2" boto3 botocore
+        pip install "setuptools<68.0.0" "packaging<21.0"
       args:
         executable: /bin/bash
       become_user: ubuntu
 
-    - name: Downgrade setuptools & packaging in venv for compatibility
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --upgrade "setuptools<68.0.0" "packaging<21.0"
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    - name: Force reinstall python-terraform & python-hcl2 (ensure fresh)
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --force-reinstall --no-cache-dir "python-terraform==0.10.1" "python-hcl2==4.3.3"
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    - name: Fix wrapt for Python 3.12
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --upgrade "wrapt>=1.15.0"
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    - name: Force pin urllib3<2 and reinstall boto3/botocore AFTER requirements
-      ansible.builtin.shell: |
-        set -e
-        source "{{ venv_path }}/bin/activate"
-        pip install --force-reinstall --no-cache-dir "urllib3<2"
-        pip install --force-reinstall --no-cache-dir boto3 botocore
-        python -c "import urllib3, boto3, botocore; print('✅ urllib3:', urllib3.__version__, 'boto3:', boto3.__version__, 'botocore:', botocore.__version__)"
-      args:
-        executable: /bin/bash
-      become_user: ubuntu
-
-    - name: Ensure attack_range.conf exists
-      ansible.builtin.command:
-        cmd: cp -n attack_range.conf.template attack_range.conf
-        chdir: "{{ repo_dir }}"
-      become_user: ubuntu
-
-    - name: Configure attack_range.conf - cloud_provider
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: global
-        option: cloud_provider
-        value: "{{ attack_range_provider }}"
-      become_user: ubuntu
-
-    - name: Configure attack_range.conf - aws region
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: aws
-        option: region
-        value: "{{ attack_range_region }}"
-      become_user: ubuntu
-
-    - name: Configure attack_range.conf - attack_range_password
-      ansible.builtin.ini_file:
-        path: "{{ repo_dir }}/attack_range.conf"
-        section: global
-        option: attack_range_password
-        value: "{{ attack_range_password }}"
-      become_user: ubuntu
+    - name: Copy attack_range config from default YAML
+      ansible.builtin.copy:
+        src: "{{ repo_dir }}/configs/attack_range_default.yml"
+        dest: "{{ repo_dir }}/attack_range.yml"
+        remote_src: yes
+        force: no
 
     - name: Terraform init
       ansible.builtin.command:
@@ -251,14 +159,13 @@
         chdir: "{{ repo_dir }}/terraform/aws"
       register: terraform_init
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
-      failed_when: terraform_init.rc not in [0,1]
+      failed_when: terraform_init.rc not in [0, 1]
 
-    - name: Run attack_range build
+    - name: Run attack_range build (YAML config)
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
-        cd "{{ repo_dir }}"
-        python attack_range.py -c attack_range.conf build
+        python attack_range.py -c attack_range.yml build
       args:
         chdir: "{{ repo_dir }}"
         executable: /bin/bash
