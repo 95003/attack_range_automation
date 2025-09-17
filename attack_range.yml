@@ -156,6 +156,15 @@
         executable: /bin/bash
       become_user: ubuntu
 
+    - name: Fix wrapt for Python 3.12   # ⬅️ ADD THIS RIGHT HERE
+      ansible.builtin.shell: |
+        set -e
+        source "{{ venv_path }}/bin/activate"
+        pip install --upgrade "wrapt>=1.15.0"
+      args:
+        executable: /bin/bash
+      become_user: ubuntu
+
     # 🔧 FIX: force pin urllib3<2 AFTER installing dependencies
     - name: Force pin urllib3<2 and reinstall boto3/botocore AFTER requirements
       ansible.builtin.shell: |
