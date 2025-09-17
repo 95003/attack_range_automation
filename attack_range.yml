@@ -257,7 +257,7 @@
         set -e
         source "{{ venv_path }}/bin/activate"
         cd "{{ repo_dir }}"
-        python attack_range.py -c attack_range.conf build
+        python attack_range.py -c attack_range.yml build
       args:
         chdir: "{{ repo_dir }}"
         executable: /bin/bash
