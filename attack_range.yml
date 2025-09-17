@@ -77,13 +77,14 @@
         create: yes
       become_user: ubuntu
 
-    - name: Clone attack_range repo (pin to stable tag)
+    - name: Clone attack_range repo (pin to latest stable release v4.0.0)
       ansible.builtin.git:
-        repo: https://github.com/splunk/attack_range.git
+        repo: "https://github.com/splunk/attack_range.git"
         dest: "{{ repo_dir }}"
-        version: master
+        version: "v4.0.0"
         force: yes
       become_user: ubuntu
+
 
     - name: Verify terraform binary is available
       ansible.builtin.command: terraform version
@@ -261,13 +262,12 @@
       args:
         chdir: "{{ repo_dir }}"
         executable: /bin/bash
-      environment:
-        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
       become_user: ubuntu
       register: attack_range_build
       retries: 3
-      delay: 30
+      delay: 10
       until: attack_range_build.rc == 0
+      failed_when: attack_range_build.rc != 0
 
     - name: Show build logs if failed
       ansible.builtin.debug:
