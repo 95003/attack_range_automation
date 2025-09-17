@@ -176,6 +176,15 @@
         executable: /bin/bash
       become_user: ubuntu
 
+    - name: Downgrade setuptools & packaging in venv for compatibility
+      ansible.builtin.shell: |
+        set -e
+        source "{{ venv_path }}/bin/activate"
+        pip install --upgrade "setuptools<68.0.0" "packaging<21.0"
+      args:
+        executable: /bin/bash
+      become_user: ubuntu
+
     - name: Force reinstall python-terraform & python-hcl2 (ensure fresh)
       ansible.builtin.shell: |
         set -e
