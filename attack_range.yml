@@ -1,18 +1,4 @@
 ---
-vars_prompt:
-  - name: "aws_access_key_id"
-    prompt: "Enter your AWS Access Key ID"
-    private: no
-
-  - name: "aws_secret_access_key"
-    prompt: "Enter your AWS Secret Access Key"
-    private: yes
-
-  - name: "aws_default_region"
-    prompt: "Enter your AWS region"
-    private: no
-    default: "ap-southeast-2"
-    
 - name: Setup Splunk Attack Range (fully automated, venv-based)
   hosts: attack_range
   become: yes
