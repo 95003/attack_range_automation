@@ -1,0 +1,108 @@
+---
+- name: Install & prepare Attack Range prerequisites (exact steps you provided)
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Apt update
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      apt:
+        name:
+          - python3.10
+          - git
+          - unzip
+          - python3-pip
+          - curl
+        state: present
+
+    - name: Download Terraform zip
+      get_url:
+        url: "{{ terraform_url }}"
+        dest: "{{ terraform_zip }}"
+        mode: '0644'
+
+    - name: Unarchive Terraform
+      unarchive:
+        src: "{{ terraform_zip }}"
+        dest: /tmp
+        remote_src: yes
+
+    - name: Move terraform binary to /usr/local/bin
+      command: mv /tmp/terraform /usr/local/bin/terraform
+      args:
+        creates: /usr/local/bin/terraform
+
+    - name: Ensure terraform is executable
+      file:
+        path: /usr/local/bin/terraform
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Clone the Attack Range repository
+      git:
+        repo: "https://github.com/splunk/attack_range.git"
+        dest: "{{ ansible_env.HOME }}/attack_range"
+        version: HEAD
+        update: no
+
+    - name: Download AWS CLI v2 zip
+      get_url:
+        url: "{{ awscli_url }}"
+        dest: "{{ awscliv2_zip }}"
+        mode: '0644'
+
+    - name: Unarchive AWS CLI v2
+      unarchive:
+        src: "{{ awscliv2_zip }}"
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install AWS CLI v2
+      command: ./aws/install
+      args:
+        chdir: /tmp/aws
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Verify aws --version
+      command: aws --version
+      register: aws_version
+      ignore_errors: yes
+
+    - name: Print aws version (for debug)
+      debug:
+        msg: "{{ aws_version.stdout | default(aws_version.stderr) }}"
+
+    - name: Ensure .aws directory exists in remote user's HOME
+      file:
+        path: "{{ ansible_env.HOME }}/.aws"
+        state: directory
+        mode: '0700'
+        owner: "{{ ansible_user_id | default(ansible_user) }}"
+        group: "{{ ansible_user_id | default(ansible_user) }}"
+
+    - name: Create AWS credentials file
+      copy:
+        dest: "{{ ansible_env.HOME }}/.aws/credentials"
+        content: |
+          [default]
+          aws_access_key_id = {{ aws_access_key }}
+          aws_secret_access_key = {{ aws_secret_key }}
+        owner: "{{ ansible_user_id | default(ansible_user) }}"
+        group: "{{ ansible_user_id | default(ansible_user) }}"
+        mode: '0600'
+
+    - name: Create AWS config file (region)
+      copy:
+        dest: "{{ ansible_env.HOME }}/.aws/config"
+        content: |
+          [default]
+          region = {{ aws_region }}
+        owner: "{{ ansible_user_id | default(ansible_user) }}"
+        group: "{{ ansible_user_id | default(ansible_user) }}"
+        mode: '0644'

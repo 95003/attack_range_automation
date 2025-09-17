@@ -4,7 +4,7 @@
   become: yes
   gather_facts: false
   vars:
-    terraform_version: "1.9.8"
+    terraform_version: "1.13.3"
     terraform_zip: "/home/ubuntu/terraform.zip"
     awscli_zip: "/home/ubuntu/awscliv2.zip"
     venv_path: "/home/ubuntu/attack_range/venv"
