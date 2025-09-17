@@ -12,7 +12,7 @@
     - name: Install base packages
       apt:
         name:
-          - python3.10
+          - python3
           - git
           - unzip
           - python3-pip
