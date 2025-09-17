@@ -106,14 +106,15 @@
         group: "{{ ansible_user_id | default(ansible_user) }}"
         mode: '0644'
     
-    - name: Execute the exact commands you provided
+    - name: Install Poetry for ubuntu user
       shell: |
         curl -sSL https://install.python-poetry.org/ | python3 -
-        export PATH="/home/ubuntu/.local/bin:$PATH"
+        export PATH="$HOME/.local/bin:$PATH"
         poetry self add poetry-plugin-shell
         poetry shell
         poetry install
       args:
         executable: /bin/bash
-      environment: {}
+      become: false         # <— Important: don’t escalate to root
+
 
