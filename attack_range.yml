@@ -223,6 +223,12 @@
         remote_src: yes
         force: no
 
+    - name: Remove existing attack_range.yml to avoid prompts
+      ansible.builtin.file:
+        path: "{{ repo_dir }}/attack_range.yml"
+        state: absent
+      become_user: ubuntu
+
     - name: Run attack_range configure with predefined answers
       ansible.builtin.expect:
         command: >
