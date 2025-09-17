@@ -105,13 +105,24 @@
         owner: "{{ ansible_user_id | default(ansible_user) }}"
         group: "{{ ansible_user_id | default(ansible_user) }}"
         mode: '0644'
-    
-    - name: Install Poetry for ubuntu user
-      shell: |
-        curl -sSL https://install.python-poetry.org/ | python3 -
-        export PATH="/root/.local/bin:$PATH"
-        /root/.local/bin/poetry self add poetry-plugin-shell
-        /root/.local/bin/poetry shell
-        /root/.local/bin/poetry install
 
+    - name: Install Poetry and project dependencies
+      hosts: all
+      become: false      # run as ubuntu user
+      vars:
+        project_dir: "/home/ubuntu/myproject"   # <-- change to your project folder
+      tasks:
+        - name: Install Poetry
+          shell: |
+            curl -sSL https://install.python-poetry.org/ | python3 -
+          args:
+            executable: /bin/bash
 
+        - name: Add Poetry plugin and install project deps
+          shell: |
+            export PATH="$HOME/.local/bin:$PATH"
+            poetry self add poetry-plugin-shell
+            poetry install
+          args:
+            chdir: "{{ project_dir }}"
+            executable: /bin/bash
