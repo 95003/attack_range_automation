@@ -223,10 +223,10 @@
         remote_src: yes
         force: no
 
-        # <-- Add these tasks here -->
+    # <-- Add these tasks here -->
     - name: Read terraform.tfvars
       ansible.builtin.slurp:
-        src: "{{ repo_dir }}/terraform.tfvars"
+        src: "{{ playbook_dir }}/terraform.tfvars"
       register: tfvars_file
       become_user: ubuntu
 
