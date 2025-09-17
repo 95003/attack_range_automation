@@ -206,12 +206,12 @@
       changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
       failed_when: terraform_init.rc not in [0,1]
 
-    - name: Run attack_range build with debug
+    - name: Run attack_range build
       ansible.builtin.shell: |
         set -e
         source "{{ venv_path }}/bin/activate"
         cd "{{ repo_dir }}"
-        python attack_range.py -c attack_range.conf build --debug
+        python attack_range.py -c attack_range.conf build
       args:
         chdir: "{{ repo_dir }}"
         executable: /bin/bash
