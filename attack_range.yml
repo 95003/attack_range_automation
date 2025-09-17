@@ -81,7 +81,7 @@
       ansible.builtin.git:
         repo: https://github.com/splunk/attack_range.git
         dest: "{{ repo_dir }}"
-        version: v3.0.8    # <-- Pin to stable tested release
+        version: master
         force: yes
       become_user: ubuntu
 
