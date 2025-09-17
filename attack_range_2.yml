@@ -109,12 +109,9 @@
     - name: Install Poetry for ubuntu user
       shell: |
         curl -sSL https://install.python-poetry.org/ | python3 -
-        export PATH="$HOME/.local/bin:$PATH"
-        poetry self add poetry-plugin-shell
-        poetry shell
-        poetry install
-      args:
-        executable: /bin/bash
-      become: false         # <— Important: don’t escalate to root
+        export PATH="/root/.local/bin:$PATH"
+        /root/.local/bin/poetry self add poetry-plugin-shell
+        /root/.local/bin/poetry shell
+        /root/.local/bin/poetry install
 
 
