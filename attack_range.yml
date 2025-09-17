@@ -1,4 +1,18 @@
 ---
+vars_prompt:
+  - name: "aws_access_key_id"
+    prompt: "Enter your AWS Access Key ID"
+    private: no
+
+  - name: "aws_secret_access_key"
+    prompt: "Enter your AWS Secret Access Key"
+    private: yes
+
+  - name: "aws_default_region"
+    prompt: "Enter your AWS region"
+    private: no
+    default: "ap-southeast-2"
+    
 - name: Setup Splunk Attack Range (fully automated, venv-based)
   hosts: attack_range
   become: yes
@@ -222,19 +236,6 @@
         dest: "{{ repo_dir }}/attack_range.yml"
         remote_src: yes
         force: no
-
-    # <-- Add these tasks here -->
-    - name: Read terraform.tfvars
-      ansible.builtin.slurp:
-        src: "{{ playbook_dir }}/terraform.tfvars"
-      register: tfvars_file
-      become_user: ubuntu
-
-    - name: Set AWS credentials from terraform.tfvars
-      ansible.builtin.set_fact:
-        aws_access_key_id: "{{ tfvars_file.content | b64decode | regex_search('aws_access_key\\s*=\\s*\"([^\"]+)\"', '\\1') }}"
-        aws_secret_access_key: "{{ tfvars_file.content | b64decode | regex_search('aws_secret_key\\s*=\\s*\"([^\"]+)\"', '\\1') }}"
-        aws_default_region: "{{ tfvars_file.content | b64decode | regex_search('region\\s*=\\s*\"([^\"]+)\"', '\\1') }}"
 
     - name: Remove existing attack_range.yml to avoid prompts
       ansible.builtin.file:
