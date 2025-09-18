@@ -129,7 +129,7 @@
             ip_whitelist: 0.0.0.0/0
             attack_range_name: ar-Attack
           aws:
-            region: us-west-2
+            region: aqp-southeast-2
             private_key_path: /home/ubuntu/attack_range/root-98552.key
           windows_servers:
           - hostname: ar-win-dc
