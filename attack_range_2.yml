@@ -116,3 +116,55 @@
         chdir: /root/attack_range         
         executable: /bin/bash
       become: yes
+
+    - name: Write attack_range.yml with the provided content (overwrite)
+      become: yes
+      copy:
+        dest: /root/attack_range/attack_range.yml
+        content: |
+          general:
+            cloud_provider: aws
+            attack_range_password: Admin123
+            key_name: root-98552
+            ip_whitelist: 0.0.0.0/0
+            attack_range_name: ar-Attack
+          aws:
+            region: us-west-2
+            private_key_path: /home/ubuntu/attack_range/root-98552.key
+          windows_servers:
+          - hostname: ar-win-dc
+            windows_image: windows-server-2022
+            create_domain: '1'
+            install_red_team_tools: '1'
+            bad_blood: '1'
+          linux_servers:
+          - hostname: ar-linux
+          kali_server:
+            kali_server: '1'
+          nginx_server:
+            nginx_server: '1'
+          zeek_server:
+            zeek_server: '1'
+          snort_server:
+            snort_server: '1'
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Run attack_range build (uses poetry) as root
+      become: yes
+      shell: |
+        export PATH="/root/.local/bin:$PATH"
+        /root/.local/bin/poetry run python attack_range.py build
+      args:
+        chdir: /root/attack_range
+        executable: /bin/bash
+      register: build_result
+      async: 3600
+      poll: 60
+
+    - name: Print build stdout/stderr (for debugging)
+      debug:
+        msg: |
+          stdout: {{ build_result.stdout | default('') }}
+          stderr: {{ build_result.stderr | default('') }}
