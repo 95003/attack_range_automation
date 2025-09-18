@@ -46,9 +46,17 @@
     - name: Clone the Attack Range repository
       git:
         repo: "https://github.com/splunk/attack_range.git"
-        dest: "{{ ansible_env.HOME }}/attack_range"
+        dest: /home/ubuntu/attack_range
         version: HEAD
         update: no
+
+    - name: Ensure attack_range repo is owned by ubuntu
+      file:
+        path: /home/ubuntu/attack_range
+        state: directory
+        recurse: yes
+        owner: ubuntu
+        group: ubuntu
 
     - name: Download AWS CLI v2 zip
       get_url:
@@ -107,27 +115,30 @@
         mode: '0644'
   
     - name: Install Poetry and Python dependencies
+      # run this as ubuntu so poetry installs into /home/ubuntu/.local
+      become: false
       shell: |
         curl -sSL https://install.python-poetry.org/ | python3 -
         export PATH="$HOME/.local/bin:$PATH"
-        poetry self add poetry-plugin-shell
-        poetry install --no-interaction
+        $HOME/.local/bin/poetry self add poetry-plugin-shell
+        $HOME/.local/bin/poetry install --no-interaction
       args:
-        chdir: /root/attack_range         
+        chdir: /home/ubuntu/attack_range
         executable: /bin/bash
-      become: yes
 
     - name: Ensure existing attack_range.yml is removed so configure won't prompt
+      # run as ubuntu to manage the file under /home/ubuntu
+      become: false
       file:
-        path: /root/attack_range/attack_range.yml
+        path: /home/ubuntu/attack_range/attack_range.yml
         state: absent
-      become: yes
 
     - name: Run attack_range configure with scripted answers (expect)
-      become: yes
+      # run as ubuntu so poetry and venv match user
+      become: false
       vars:
-        project_dir: /root/attack_range
-        poetry_path: /root/.local/bin/poetry
+        project_dir: /home/ubuntu/attack_range
+        poetry_path: /home/ubuntu/.local/bin/poetry
       expect:
         command: "{{ poetry_path }} run python attack_range.py configure"
         chdir: "{{ project_dir }}"
@@ -155,4 +166,3 @@
           'Shall we build zeek server': "Yes\n"
           'Shall we build snort server': "Yes\n"
           'Shall we include Splunk SOAR': "No\n"
-
