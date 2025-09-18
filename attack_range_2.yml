@@ -117,7 +117,7 @@
         executable: /bin/bash
       become: yes
 
-    - name: Write attack_range.yml with the provided content (overwrite)
+    - name: Write attack_range.yml with the provided content (use aws_region var)
       become: yes
       copy:
         dest: /root/attack_range/attack_range.yml
@@ -129,7 +129,7 @@
             ip_whitelist: 0.0.0.0/0
             attack_range_name: ar-Attack
           aws:
-            region: aqp-southeast-2
+            region: "{{ aws_region }}"
             private_key_path: /home/ubuntu/attack_range/root-98552.key
           windows_servers:
           - hostname: ar-win-dc
@@ -151,9 +151,13 @@
         group: root
         mode: '0600'
 
-    - name: Run attack_range build (uses poetry) as root
+    - name: Run attack_range build (uses poetry) as root (export AWS envs to guarantee matching region)
       become: yes
       shell: |
+        export AWS_DEFAULT_REGION="{{ aws_region }}"
+        export AWS_REGION="{{ aws_region }}"
+        export AWS_ACCESS_KEY_ID="{{ aws_access_key }}"
+        export AWS_SECRET_ACCESS_KEY="{{ aws_secret_key }}"
         export PATH="/root/.local/bin:$PATH"
         /root/.local/bin/poetry run python attack_range.py build
       args:
