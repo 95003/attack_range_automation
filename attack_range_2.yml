@@ -106,13 +106,19 @@
         group: "{{ ansible_user_id | default(ansible_user) }}"
         mode: '0644'
   
-    - name: Install Poetry and run project commands (run in /root/attack_range)
-      shell: |
-        curl -sSL https://install.python-poetry.org/ | python3 -
-        export PATH="/root/.local/bin:$PATH"
-        /root/.local/bin/poetry self add poetry-plugin-shell
-        /root/.local/bin/poetry shell
-        /root/.local/bin/poetry install
-      args:
-        chdir: /root/attack_range
-        executable: /bin/bash
+    - name: Install Poetry and Python dependencies
+      hosts: all
+      become: false
+      vars:
+        project_dir: /home/ubuntu/attack_range    # adjust to your project folder
+      tasks:
+        - name: Install Poetry and deps (non-interactive)
+          shell: |
+            curl -sSL https://install.python-poetry.org/ | python3 -
+            export PATH="$HOME/.local/bin:$PATH"
+            poetry self add poetry-plugin-shell
+            poetry install --no-interaction
+          args:
+            chdir: "{{ project_dir }}"
+            executable: /bin/bash
+
