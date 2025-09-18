@@ -107,18 +107,13 @@
         mode: '0644'
   
     - name: Install Poetry and Python dependencies
-      hosts: all
-      become: false
-      vars:
-        project_dir: /home/ubuntu/attack_range    # adjust to your project folder
-      tasks:
-        - name: Install Poetry and deps (non-interactive)
-          shell: |
-            curl -sSL https://install.python-poetry.org/ | python3 -
-            export PATH="$HOME/.local/bin:$PATH"
-            poetry self add poetry-plugin-shell
-            poetry install --no-interaction
-          args:
-            chdir: "{{ project_dir }}"
-            executable: /bin/bash
+      shell: |
+        curl -sSL https://install.python-poetry.org/ | python3 -
+        export PATH="$HOME/.local/bin:$PATH"
+        poetry self add poetry-plugin-shell
+        poetry install --no-interaction
+      args:
+        chdir: /home/ubuntu/attack_range
+        executable: /bin/bash
+
 
