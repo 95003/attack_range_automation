@@ -166,9 +166,3 @@
       register: build_result
       async: 3600
       poll: 60
-
-    - name: Print build stdout/stderr (for debugging)
-      debug:
-        msg: |
-          stdout: {{ build_result.stdout | default('') }}
-          stderr: {{ build_result.stderr | default('') }}
