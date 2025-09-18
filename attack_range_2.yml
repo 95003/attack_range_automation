@@ -118,7 +118,7 @@
       become: yes
 
     - name: Write attack_range.yml with the provided content (use aws_region var)
-      become: yes
+      become: yes 
       copy:
         dest: /root/attack_range/attack_range.yml
         content: |
@@ -164,5 +164,9 @@
         chdir: /root/attack_range
         executable: /bin/bash
       register: build_result
-      async: 3600
-      poll: 60
+
+    - name: Print build stdout/stderr
+      debug:
+        msg: |
+          stdout: {{ build_result.stdout | default('') }}
+          stderr: {{ build_result.stderr | default('') }}
