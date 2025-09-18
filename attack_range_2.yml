@@ -126,13 +126,17 @@
     - name: Run attack_range configure with scripted answers (expect)
       become: yes
       vars:
-        project_dir: /root/attack_range           # change if your project is elsewhere
-        poetry_path: /root/.local/bin/poetry      # change to /home/ubuntu/.local/bin/poetry if running as ubuntu
+        project_dir: /root/attack_range
+        poetry_path: /root/.local/bin/poetry
       expect:
         command: "{{ poetry_path }} run python attack_range.py configure"
         chdir: "{{ project_dir }}"
+        timeout: 1200
         responses:
-          # prompts -> responses (each response ends with \n)
+          # answer overwrite prompt first (robust regex to tolerate ANSI/control chars)
+          '.*File .*attack_range\\.yml.*are you sure you want to continue.*': "Y\n"
+
+          # remaining scripted prompts -> responses (each response ends with \n)
           'Select cloud provider': "aws\n"
           'Enter a master password for your attack_range': "Admin123\n"
           'Detected existing key .* would you like to use it': "Yes\n"
@@ -151,4 +155,4 @@
           'Shall we build zeek server': "Yes\n"
           'Shall we build snort server': "Yes\n"
           'Shall we include Splunk SOAR': "No\n"
-        timeout: 600
+
